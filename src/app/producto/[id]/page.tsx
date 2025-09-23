@@ -1,5 +1,8 @@
 // src/app/producto/[id]/page.tsx
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3000";
+"use client";
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+import { resolveImageUrls } from "@/lib/resolveImageUrls";
 
 type Product = {
   _id: string;
@@ -7,63 +10,96 @@ type Product = {
   description?: string;
   price?: number;
   category?: string;
+  images?: string[];
   [k: string]: any;
 };
 
-type ProductResponse =
-  | { success: true; data: Product; message?: string }
-  | { success: false; message: string };
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3000";
 
-export default async function ProductDetailPage({ params }: { params: { id: string } }) {
-  const id = params.id;
+export default function ProductDetail() {
+  const params = useParams<{ id: string }>();
+  const id = Array.isArray(params?.id) ? params.id[0] : params?.id;
 
-  let product: Product | null = null;
-  let err: string | null = null;
+  const [p, setP] = useState<Product | null>(null);
+  const [imgs, setImgs] = useState<string[]>([]);
+  const [err, setErr] = useState<string | null>(null);
 
-  try {
-    const res = await fetch(`${API_BASE}/products/${id}`, { cache: "no-store" });
-    const json = (await res.json()) as ProductResponse;
+  useEffect(() => {
+    if (!id) return;
 
-    if (!res.ok || !("success" in json) || json.success !== true) {
-      // Tu API: 404 => "Producto no encontrado"
-      throw new Error(("message" in json && json.message) || "Producto no encontrado");
-    }
-    product = json.data;
-  } catch (e: any) {
-    err = e?.message || "Producto no encontrado";
-  }
+    const ac = new AbortController();
 
-  if (err) {
-    return (
-      <main style={{ maxWidth: 960, margin: "24px auto", padding: "0 16px" }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>Producto</h1>
-        <p style={{ color: "crimson" }}>{err}</p>
-      </main>
-    );
-  }
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/products/${id}`, {
+          cache: "no-store",
+          signal: ac.signal,
+        });
 
-  if (!product) return null;
+        const text = await res.text();
+        const json = text ? JSON.parse(text) : null;
+
+        if (!res.ok) throw new Error("No se pudo obtener el producto");
+
+        const data: Product = json?.data ?? json; // soporta {success,data} o plano
+        setP(data);
+
+        const urls = await resolveImageUrls(data?.images ?? []);
+        setImgs(urls);
+      } catch (e: any) {
+        if (e?.name !== "AbortError") setErr(e?.message || "Error");
+      }
+    })();
+
+    return () => ac.abort();
+  }, [id]);
+
+  if (err) return <main style={{ padding: 16 }}><p style={{ color: "crimson" }}>{err}</p></main>;
+  if (!p) return <main style={{ padding: 16 }}><p>Cargando…</p></main>;
 
   return (
     <main style={{ maxWidth: 960, margin: "24px auto", padding: "0 16px" }}>
-      <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 12 }}>{product.name}</h1>
+      <h1 style={{ fontSize: 32, margin: "0 0 16px" }}>{p.name}</h1>
+
+      {!!imgs.length && (
+        <div
+          style={{
+            display: "grid",
+            gap: 12,
+            gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))",
+            marginBottom: 16,
+          }}
+        >
+          {imgs.map((src, i) => (
+            <img
+              key={src + i}
+              src={src}
+              alt={`${p.name} ${i + 1}`}
+              style={{
+                width: "100%",
+                aspectRatio: "1/1",
+                objectFit: "cover",
+                borderRadius: 12,
+                border: "1px solid #eee",
+              }}
+              loading="lazy"
+            />
+          ))}
+        </div>
+      )}
 
       <section
         style={{
-          display: "grid",
-          gap: 10,
           border: "1px solid #eee",
           borderRadius: 12,
-          padding: 12,
+          padding: 16,
           background: "#fff",
         }}
       >
-        <div><strong>ID:</strong> {product._id}</div>
-        {typeof product.price !== "undefined" && (
-          <div><strong>Precio:</strong> {product.price}</div>
-        )}
-        {product.category && <div><strong>Categoría:</strong> {product.category}</div>}
-        {product.description && <p style={{ margin: 0 }}>{product.description}</p>}
+        <p><strong>ID:</strong> {p._id}</p>
+        {typeof p.price !== "undefined" && <p><strong>Precio:</strong> {p.price}</p>}
+        {p.category && <p><strong>Categoría:</strong> {p.category}</p>}
+        {p.description && <p style={{ marginTop: 8 }}>{p.description}</p>}
       </section>
     </main>
   );

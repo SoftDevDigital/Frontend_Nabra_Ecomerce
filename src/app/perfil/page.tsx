@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
+import s from "./Perfil.module.css";
 
 type Address = {
   street?: string;
@@ -28,7 +29,7 @@ type ProfileResponse =
   | { success: true; data: UserProfile; message?: string }
   | { success: false; message: string };
 
-/* ========= AGREGADO: helpers para detectar admin por el token ========= */
+/* ========= helpers para detectar admin por el token ========= */
 function getJwtPayload(): any | null {
   try {
     const t = typeof window !== "undefined" ? localStorage.getItem("nabra_token") : null;
@@ -56,7 +57,7 @@ export default function PerfilPage() {
   const [err, setErr] = useState<string | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
-  /* ⬇️⬇️⬇️ AGREGADO: estado para editar y guardar perfil */
+  // estado para editar y guardar perfil
   const [formName, setFormName] = useState("");
   const [formStreet, setFormStreet] = useState("");
   const [formCity, setFormCity] = useState("");
@@ -64,27 +65,23 @@ export default function PerfilPage() {
   const [formCountry, setFormCountry] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
-  /* ⬆️⬆️⬆️ FIN agregado */
 
-  /* ========= AGREGADO: admin + listado de usuarios (GET /users) ========= */
+  // admin + listado de usuarios (GET /users)
   const [isAdmin, setIsAdmin] = useState(false);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
   const [usersErr, setUsersErr] = useState<string | null>(null);
-  
 
-  // === NUEVO: edición de rol de usuario ===
+  // edición de rol
   const ROLE_OPTIONS = ["user", "admin"] as const;
   type Role = typeof ROLE_OPTIONS[number];
-
   const [roleDraft, setRoleDraft] = useState<Record<string, Role>>({});
   const [roleSavingId, setRoleSavingId] = useState<string | null>(null);
   const [roleMsg, setRoleMsg] = useState<string | null>(null);
 
-  /* ⬇️⬇️⬇️ NUEVO: eliminación de usuario (DELETE /users/:id) */
+  // eliminación de usuario
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [deleteMsg, setDeleteMsg] = useState<string | null>(null);
-  /* ⬆️⬆️⬆️ FIN eliminación */
 
   useEffect(() => {
     setIsAdmin(isAdminFromToken());
@@ -105,9 +102,8 @@ export default function PerfilPage() {
       }
       const list = r.data || [];
       setUsers(list);
-      // precargar selects con rol actual
       const draft: Record<string, Role> = {};
-      list.forEach(u => draft[u._id] = ((u.role || "user") as Role));
+      list.forEach((u) => (draft[u._id] = ((u.role || "user") as Role)));
       setRoleDraft(draft);
     } catch (e: any) {
       const m = String(e?.message || "No se pudieron obtener los usuarios");
@@ -123,7 +119,6 @@ export default function PerfilPage() {
       setUsersLoading(false);
     }
   }
-  /* ========================================================================= */
 
   async function loadProfile() {
     setLoading(true);
@@ -135,25 +130,19 @@ export default function PerfilPage() {
       }
       setProfile(r.data);
 
-      /* ⬇️ AGREGADO: rellenar formulario con los datos actuales */
       const p = r.data;
       setFormName(p.name || [p.firstName, p.lastName].filter(Boolean).join(" "));
       setFormStreet(p.address?.street || "");
       setFormCity(p.address?.city || "");
       setFormZip(p.address?.zip || "");
       setFormCountry(p.address?.country || "");
-      /* ⬆️ FIN agregado */
     } catch (e: any) {
       const msg = String(e?.message || "No se pudo obtener el perfil");
       if (msg.toLowerCase().includes("no autenticado") || msg.toLowerCase().includes("token")) {
         window.location.href = "/auth?redirectTo=/perfil";
         return;
       }
-      setErr(
-        msg.includes("404") || /no encontrado/i.test(msg)
-          ? "Usuario no encontrado"
-          : msg
-      );
+      setErr(msg.includes("404") || /no encontrado/i.test(msg) ? "Usuario no encontrado" : msg);
     } finally {
       setLoading(false);
     }
@@ -175,10 +164,9 @@ export default function PerfilPage() {
     try {
       localStorage.removeItem("nabra_token");
     } catch {}
-    window.location.href = "/"; // limpia y vuelve al inicio
+    window.location.href = "/";
   }
 
-  /* ⬇️⬇️⬇️ AGREGADO: handler para PUT /users/profile */
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setSaveMsg(null);
@@ -221,11 +209,7 @@ export default function PerfilPage() {
         window.location.href = "/auth?redirectTo=/perfil";
         return;
       }
-      setSaveMsg(
-        msg.includes("404") || /no encontrado/i.test(msg)
-          ? "Usuario no encontrado"
-          : msg
-      );
+      setSaveMsg(msg.includes("404") || /no encontrado/i.test(msg) ? "Usuario no encontrado" : msg);
     } finally {
       setSaving(false);
     }
@@ -240,9 +224,7 @@ export default function PerfilPage() {
     setFormCountry(p?.address?.country || "");
     setSaveMsg(null);
   }
-  /* ⬆️⬆️⬆️ FIN agregado */
 
-  /* ================== NUEVO: PUT /users/:id/role (solo admin) ================== */
   type RoleUpdateResponse =
     | { success: true; data: UserProfile; message?: string }
     | { success: false; message: string };
@@ -267,13 +249,11 @@ export default function PerfilPage() {
         throw new Error(("message" in r && r.message) || "No se pudo actualizar el rol");
       }
 
-      // sincronizar lista con el valor confirmado por backend
-      setUsers(prev => prev.map(u => (u._id === userId ? { ...u, role: r.data.role } : u)));
-      setRoleDraft(s => ({ ...s, [userId]: (r.data.role as Role) }));
+      setUsers((prev) => prev.map((u) => (u._id === userId ? { ...u, role: r.data.role } : u)));
+      setRoleDraft((s) => ({ ...s, [userId]: (r.data.role as Role) }));
       setRoleMsg(`Rol actualizado ✅ (${r.data.email}: ${r.data.role})`);
     } catch (e: any) {
       const m = String(e?.message || "No se pudo actualizar el rol");
-      // 403 admin requerido / 404 usuario no encontrado / 401 sin token
       if (m.toLowerCase().includes("no autenticado") || m.toLowerCase().includes("token")) {
         window.location.href = "/auth?redirectTo=/perfil";
         return;
@@ -283,13 +263,10 @@ export default function PerfilPage() {
       setRoleSavingId(null);
     }
   }
-  /* ============================================================================ */
 
-  /* ============== NUEVO: DELETE /users/:id (solo admin) ============== */
   async function handleDeleteUser(userId: string) {
     if (!userId) return;
 
-    // Evitar que el admin se borre a sí mismo
     if (profile?._id === userId) {
       setDeleteMsg("No podés eliminar tu propio usuario.");
       return;
@@ -303,10 +280,8 @@ export default function PerfilPage() {
     try {
       await apiFetch<unknown>(`/users/${userId}`, { method: "DELETE" });
 
-      // 200 vacío -> removemos de la lista
-      setUsers(prev => prev.filter(u => u._id !== userId));
-      // limpiamos borradores si existían
-      setRoleDraft(prev => {
+      setUsers((prev) => prev.filter((u) => u._id !== userId));
+      setRoleDraft((prev) => {
         const { [userId]: _omit, ...rest } = prev;
         return rest as typeof prev;
       });
@@ -317,343 +292,221 @@ export default function PerfilPage() {
         window.location.href = "/auth?redirectTo=/perfil";
         return;
       }
-      // 403 admin requerido / 404 usuario no encontrado
       setDeleteMsg(m);
     } finally {
       setDeletingUserId(null);
     }
   }
-  /* ==================================================================== */
 
   return (
-    <main style={{ maxWidth: 880, margin: "24px auto", padding: "0 16px" }}>
-      <header style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Mi perfil</h1>
-        <span style={{ marginLeft: "auto", opacity: 0.75, fontSize: 14 }}>
-          <Link href="/">Volver al inicio</Link>
-        </span>
-      </header>
+    <main className={s.page}>
+      <div className={s.container}>
+        {/* Header */}
+        <header className={s.headerRow}>
+          <h1 className={s.h1}>Mi perfil</h1>
+          <Link href="/" className={s.backLink}>Volver al inicio</Link>
+        </header>
 
-      <section
-        style={{
-          display: "grid",
-          gap: 12,
-          border: "1px solid #eee",
-          borderRadius: 12,
-          padding: 16,
-          background: "#fff",
-        }}
-      >
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <button
-            type="button"
-            onClick={loadProfile}
-            disabled={loading}
-            style={{
-              padding: "8px 12px",
-              borderRadius: 8,
-              border: "1px solid #ddd",
-              background: loading ? "#f3f3f3" : "white",
-              cursor: loading ? "default" : "pointer",
-              fontWeight: 600,
-            }}
-            title="Actualizar perfil (GET /users/profile)"
-          >
-            {loading ? "Cargando…" : "Actualizar"}
-          </button>
+        {/* Panel 1: perfil + acciones */}
+        <section className={s.card}>
+          <div className={s.btnRow}>
+            <button
+              type="button"
+              onClick={loadProfile}
+              className={`${s.btn} ${loading ? s.btnDisabled : s.btnGhost}`}
+              title="Actualizar perfil"
+            >
+              {loading ? "Cargando…" : "Actualizar"}
+            </button>
 
-          <button
-            type="button"
-            onClick={handleLogout}
-            style={{
-              padding: "8px 12px",
-              borderRadius: 8,
-              border: "1px solid #f1c0c0",
-              background: "white",
-              color: "#b00020",
-              fontWeight: 600,
-            }}
-            title="Cerrar sesión"
-          >
-            Cerrar sesión
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className={`${s.btn} ${s.btnDanger}`}
+              title="Cerrar sesión"
+            >
+              Cerrar sesión
+            </button>
+          </div>
 
-        {err && <p style={{ margin: 0, color: "crimson" }}>{err}</p>}
+          {err && <p className={s.msgErr}>{err}</p>}
+          {!err && loading && <p> Cargando perfil…</p>}
 
-        {!err && loading && <p style={{ margin: 0 }}>Cargando perfil…</p>}
-
-        {!err && !loading && profile && (
-          <div style={{ display: "grid", gap: 8 }}>
-            <div><strong>ID:</strong> {profile._id}</div>
-            <div><strong>Email:</strong> {profile.email}</div>
-            {fullName(profile) && <div><strong>Nombre:</strong> {fullName(profile)}</div>}
-            {profile.role && <div><strong>Rol:</strong> {profile.role}</div>}
-
-            <div style={{ marginTop: 6 }}>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Dirección</div>
-              {profile.address ? (
-                <div style={{ display: "grid", gap: 2, fontSize: 14 }}>
-                  {profile.address.street && <div><strong>Calle:</strong> {profile.address.street}</div>}
-                  {profile.address.city && <div><strong>Ciudad:</strong> {profile.address.city}</div>}
-                  {profile.address.zip && <div><strong>CP:</strong> {profile.address.zip}</div>}
-                  {profile.address.country && <div><strong>País:</strong> {profile.address.country}</div>}
+          {!err && !loading && profile && (
+            <div className={s.profileGrid}>
+              {/* Izquierda: datos */}
+              <div className={s.kv}>
+                <div className={s.kvRow}>
+                  <div className={s.kvKey}>ID</div><div className={s.kvVal}>{profile._id}</div>
                 </div>
-              ) : (
-                <div style={{ opacity: 0.7, fontSize: 14 }}>Sin dirección cargada.</div>
-              )}
-            </div>
-          </div>
-        )}
-      </section>
+                <div className={s.kvRow}>
+                  <div className={s.kvKey}>Email</div><div className={s.kvVal}>{profile.email}</div>
+                </div>
+                {fullName(profile) && (
+                  <div className={s.kvRow}>
+                    <div className={s.kvKey}>Nombre</div><div className={s.kvVal}>{fullName(profile)}</div>
+                  </div>
+                )}
+                {profile.role && (
+                  <div className={s.kvRow}>
+                    <div className={s.kvKey}>Rol</div>
+                    <div className={s.kvVal}><span className={s.badge}>{profile.role}</span></div>
+                  </div>
+                )}
 
-      {/* ⬇️⬇️⬇️ Form para PUT /users/profile */}
-      <section
-        style={{
-          marginTop: 16,
-          display: "grid",
-          gap: 12,
-          border: "1px solid #eee",
-          borderRadius: 12,
-          padding: 16,
-          background: "#fff",
-        }}
-      >
-        <div style={{ fontWeight: 700 }}>Editar datos del perfil</div>
-
-        <form onSubmit={handleSave} style={{ display: "grid", gap: 10 }}>
-          <label style={{ display: "grid", gap: 4 }}>
-            <span style={{ fontSize: 13, opacity: 0.8 }}>Nombre</span>
-            <input
-              value={formName}
-              onChange={(e) => setFormName(e.target.value)}
-              placeholder="Juan Pérez"
-              style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
-            />
-          </label>
-
-          <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr" }}>
-            <label style={{ display: "grid", gap: 4 }}>
-              <span style={{ fontSize: 13, opacity: 0.8 }}>Calle</span>
-              <input
-                value={formStreet}
-                onChange={(e) => setFormStreet(e.target.value)}
-                placeholder="Calle 123"
-                style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
-              />
-            </label>
-            <label style={{ display: "grid", gap: 4 }}>
-              <span style={{ fontSize: 13, opacity: 0.8 }}>Ciudad</span>
-              <input
-                value={formCity}
-                onChange={(e) => setFormCity(e.target.value)}
-                placeholder="Ciudad"
-                style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
-              />
-            </label>
-          </div>
-
-          <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr" }}>
-            <label style={{ display: "grid", gap: 4 }}>
-              <span style={{ fontSize: 13, opacity: 0.8 }}>Código postal</span>
-              <input
-                value={formZip}
-                onChange={(e) => setFormZip(e.target.value)}
-                placeholder="1111"
-                style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
-              />
-            </label>
-            <label style={{ display: "grid", gap: 4 }}>
-              <span style={{ fontSize: 13, opacity: 0.8 }}>País</span>
-              <input
-                value={formCountry}
-                onChange={(e) => setFormCountry(e.target.value)}
-                placeholder="Argentina"
-                style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
-              />
-            </label>
-          </div>
-
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <button
-              type="submit"
-              disabled={saving}
-              style={{
-                padding: "10px 14px",
-                borderRadius: 10,
-                border: "1px solid #ddd",
-                background: saving ? "#f3f3f3" : "white",
-                cursor: saving ? "default" : "pointer",
-                fontWeight: 700,
-              }}
-              title="Guardar cambios (PUT /users/profile)"
-            >
-              {saving ? "Guardando…" : "Guardar cambios"}
-            </button>
-
-            <button
-              type="button"
-              onClick={resetFormFromProfile}
-              disabled={saving}
-              style={{
-                padding: "10px 14px",
-                borderRadius: 10,
-                border: "1px solid #ddd",
-                background: "white",
-                fontWeight: 700,
-              }}
-              title="Restaurar valores actuales"
-            >
-              Restablecer
-            </button>
-
-            {saveMsg && (
-              <p style={{ margin: 0, color: saveMsg.includes("✅") ? "green" : "crimson" }}>{saveMsg}</p>
-            )}
-          </div>
-        </form>
-      </section>
-      {/* ⬆️⬆️⬆️ FIN PUT /users/profile */}
-
-      {/* ===================== AGREGADO: Bloque ADMIN GET /users + cambiar rol ===================== */}
-      {isAdmin && (
-        <section
-          style={{
-            marginTop: 16,
-            display: "grid",
-            gap: 12,
-            border: "1px solid #eee",
-            borderRadius: 12,
-            padding: 16,
-            background: "#fff",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Usuarios (admin)</h2>
-            <button
-              type="button"
-              onClick={loadAllUsers}
-              disabled={usersLoading}
-              style={{
-                padding: "8px 12px",
-                borderRadius: 8,
-                border: "1px solid #ddd",
-                background: usersLoading ? "#f3f3f3" : "white",
-                cursor: usersLoading ? "default" : "pointer",
-                fontWeight: 600,
-                marginLeft: "auto",
-              }}
-              title="Obtener todos los usuarios (GET /users)"
-            >
-              {usersLoading ? "Cargando…" : "Actualizar lista"}
-            </button>
-          </div>
-
-          {usersErr && <p style={{ margin: 0, color: "crimson" }}>{usersErr}</p>}
-          {roleMsg && <p style={{ margin: 0, color: roleMsg.includes("✅") ? "green" : "crimson" }}>{roleMsg}</p>}
-          {deleteMsg && (
-            <p style={{ margin: 0, color: deleteMsg.includes("🗑️") ? "green" : "crimson" }}>{deleteMsg}</p>
-          )}
-
-          {!usersErr && users.length > 0 && (
-            <div style={{ display: "grid", gap: 8 }}>
-              <div style={{ opacity: 0.8, fontSize: 14 }}>
-                Total: <strong>{users.length}</strong>
+                <div className={s.cardHeader} style={{ marginTop: 8 }}>
+                  <h3 className={s.cardTitle}>Dirección</h3>
+                </div>
+                {profile.address ? (
+                  <div className={s.kv}>
+                    {profile.address.street && (
+                      <div className={s.kvRow}><div className={s.kvKey}>Calle</div><div className={s.kvVal}>{profile.address.street}</div></div>
+                    )}
+                    {profile.address.city && (
+                      <div className={s.kvRow}><div className={s.kvKey}>Ciudad</div><div className={s.kvVal}>{profile.address.city}</div></div>
+                    )}
+                    {profile.address.zip && (
+                      <div className={s.kvRow}><div className={s.kvKey}>CP</div><div className={s.kvVal}>{profile.address.zip}</div></div>
+                    )}
+                    {profile.address.country && (
+                      <div className={s.kvRow}><div className={s.kvKey}>País</div><div className={s.kvVal}>{profile.address.country}</div></div>
+                    )}
+                  </div>
+                ) : (
+                  <p className={s.userMeta}>Sin dirección cargada.</p>
+                )}
               </div>
-              <div style={{ display: "grid", gap: 8 }}>
+
+              {/* Derecha: acciones rápidas (placeholder) */}
+              <div></div>
+            </div>
+          )}
+        </section>
+
+        {/* Panel 2: editar perfil */}
+        <section className={s.card}>
+          <div className={s.cardHeader}>
+            <h2 className={s.cardTitle}>Editar datos del perfil</h2>
+          </div>
+
+          <form onSubmit={handleSave} className={s.form}>
+            <label className={s.label}>
+              <span>Nombre</span>
+              <input className={s.input} value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="Juan Pérez" />
+            </label>
+
+            <div className={s.row2}>
+              <label className={s.label}>
+                <span>Calle</span>
+                <input className={s.input} value={formStreet} onChange={(e) => setFormStreet(e.target.value)} placeholder="Calle 123" />
+              </label>
+              <label className={s.label}>
+                <span>Ciudad</span>
+                <input className={s.input} value={formCity} onChange={(e) => setFormCity(e.target.value)} placeholder="Ciudad" />
+              </label>
+            </div>
+
+            <div className={s.row2}>
+              <label className={s.label}>
+                <span>Código postal</span>
+                <input className={s.input} value={formZip} onChange={(e) => setFormZip(e.target.value)} placeholder="1111" />
+              </label>
+              <label className={s.label}>
+                <span>País</span>
+                <input className={s.input} value={formCountry} onChange={(e) => setFormCountry(e.target.value)} placeholder="Argentina" />
+              </label>
+            </div>
+
+            <div className={s.actions}>
+              <button
+                type="submit"
+                className={`${s.btn} ${s.btnPrimary}`}
+                disabled={saving}
+                title="Guardar cambios"
+              >
+                {saving ? "Guardando…" : "Guardar cambios"}
+              </button>
+              <button
+                type="button"
+                className={`${s.btn} ${s.btnGhost}`}
+                onClick={resetFormFromProfile}
+                disabled={saving}
+              >
+                Restablecer
+              </button>
+              {saveMsg && <span className={saveMsg.includes("✅") ? s.msgOk : s.msgErr}>{saveMsg}</span>}
+            </div>
+          </form>
+        </section>
+
+        {/* Panel 3: Admin */}
+        {isAdmin && (
+          <section className={s.card}>
+            <div className={s.cardHeader}>
+              <h2 className={s.cardTitle}>Usuarios (admin)</h2>
+              <div className={s.btnRow} style={{ marginLeft: "auto" }}>
+                <button
+                  type="button"
+                  onClick={loadAllUsers}
+                  className={`${s.btn} ${usersLoading ? s.btnDisabled : s.btnGhost}`}
+                >
+                  {usersLoading ? "Cargando…" : "Actualizar lista"}
+                </button>
+              </div>
+            </div>
+
+            {usersErr && <p className={s.msgErr}>{usersErr}</p>}
+            {roleMsg && <p className={roleMsg.includes("✅") ? s.msgOk : s.msgErr}>{roleMsg}</p>}
+            {deleteMsg && <p className={deleteMsg.includes("🗑️") ? s.msgOk : s.msgErr}>{deleteMsg}</p>}
+
+            {!usersErr && users.length > 0 && (
+              <div className={s.usersList}>
                 {users.map((u) => (
-                  <article
-                    key={u._id}
-                    style={{
-                      display: "grid",
-                      gap: 6,
-                      padding: 10,
-                      border: "1px solid #eee",
-                      borderRadius: 10,
-                      background: "#fff",
-                    }}
-                  >
-                    <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+                  <article key={u._id} className={s.userItem}>
+                    <div className={s.userTop}>
                       <strong>{u.name || [u.firstName, u.lastName].filter(Boolean).join(" ") || "(Sin nombre)"}</strong>
-                      <span style={{ fontSize: 14, opacity: 0.9 }}>
-                        • <strong>Email:</strong> {u.email}
-                      </span>
-                      <span style={{ fontSize: 14, opacity: 0.9 }}>
-                        • <strong>Rol actual:</strong> {u.role || "user"}
-                      </span>
+                      <span className={s.userMeta}>• <b>Email:</b> {u.email}</span>
+                      <span className={s.userMeta}>• <b>Rol actual:</b> <span className={s.badge}>{u.role || "user"}</span></span>
                     </div>
 
                     {u.address && (
-                      <div style={{ fontSize: 13, opacity: 0.85 }}>
-                        <strong>Dir:</strong>{" "}
-                        {[
-                          u.address.street,
-                          u.address.city && `(${u.address.city})`,
-                          u.address.zip,
-                          u.address.country,
-                        ]
+                      <div className={s.userMeta}>
+                        <b>Dir:</b>{" "}
+                        {[u.address.street, u.address.city && `(${u.address.city})`, u.address.zip, u.address.country]
                           .filter(Boolean)
                           .join(", ")}
                       </div>
                     )}
 
-                    <div style={{ fontSize: 12, opacity: 0.7 }}>
-                      <strong>ID:</strong> {u._id}
-                    </div>
+                    <div className={s.userMeta}><b>ID:</b> {u._id}</div>
 
-                    {/* --- NUEVO: cambiar rol --- */}
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                      <label style={{ fontSize: 13, opacity: 0.85 }}>Nuevo rol:</label>
+                    <div className={s.userActions}>
+                      <label className={s.userMeta}>Nuevo rol:</label>
                       <select
-                        value={roleDraft[u._id] ?? (u.role as Role) ?? "user"}
-                        onChange={(e) =>
-                          setRoleDraft((s) => ({ ...s, [u._id]: e.target.value as Role }))
-                        }
+                        value={roleDraft[u._id] ?? (u.role as any) ?? "user"}
+                        onChange={(e) => setRoleDraft((s2) => ({ ...s2, [u._id]: e.target.value as any }))}
                         disabled={roleSavingId === u._id}
-                        style={{ padding: "6px 8px", borderRadius: 8, border: "1px solid #ddd" }}
-                        aria-label={`Seleccionar rol para ${u.email}`}
+                        className={s.select}
                       >
-                        {ROLE_OPTIONS.map((r) => (
-                          <option key={r} value={r}>
-                            {r}
-                          </option>
-                        ))}
+                        <option value="user">user</option>
+                        <option value="admin">admin</option>
                       </select>
 
                       <button
                         type="button"
+                        className={`${s.btn} ${roleSavingId === u._id ? s.btnDisabled : s.btnGhost}`}
                         onClick={() => handleUpdateUserRole(u._id)}
                         disabled={roleSavingId === u._id}
-                        style={{
-                          padding: "8px 12px",
-                          borderRadius: 8,
-                          border: "1px solid #ddd",
-                          background: roleSavingId === u._id ? "#f3f3f3" : "white",
-                          cursor: roleSavingId === u._id ? "default" : "pointer",
-                          fontWeight: 600,
-                        }}
-                        title="Actualizar rol (PUT /users/:id/role)"
                       >
                         {roleSavingId === u._id ? "Guardando…" : "Actualizar rol"}
                       </button>
-                    </div>
 
-                    {/* --- NUEVO: eliminar usuario (solo admin) --- */}
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                       <button
                         type="button"
+                        className={`${s.btn} ${s.btnDanger}`}
                         onClick={() => handleDeleteUser(u._id)}
                         disabled={deletingUserId === u._id || profile?._id === u._id}
-                        style={{
-                          padding: "8px 12px",
-                          borderRadius: 8,
-                          border: "1px solid #f1c0c0",
-                          background: deletingUserId === u._id ? "#f8eaea" : "white",
-                          color: "#b00020",
-                          cursor: deletingUserId === u._id ? "default" : "pointer",
-                          fontWeight: 600,
-                        }}
-                        title={profile?._id === u._id ? "No podés eliminar tu propia cuenta" : "Eliminar usuario (DELETE /users/:id)"}
+                        title={profile?._id === u._id ? "No podés eliminar tu propia cuenta" : "Eliminar usuario"}
                       >
                         {deletingUserId === u._id ? "Eliminando…" : "Eliminar usuario"}
                       </button>
@@ -661,15 +514,14 @@ export default function PerfilPage() {
                   </article>
                 ))}
               </div>
-            </div>
-          )}
+            )}
 
-          {!usersErr && !usersLoading && users.length === 0 && (
-            <p style={{ margin: 0, opacity: 0.8 }}>Aún no cargaste la lista.</p>
-          )}
-        </section>
-      )}
-      {/* ===================== FIN bloque ADMIN GET /users + cambiar rol ===================== */}
+            {!usersErr && !usersLoading && users.length === 0 && (
+              <p className={s.userMeta}>Aún no cargaste la lista.</p>
+            )}
+          </section>
+        )}
+      </div>
     </main>
   );
 }

@@ -408,17 +408,18 @@ export default function AdminCreateProductPage() {
         <>
           {/* ====== Selección por lista para editar ====== */}
           <section
-            style={{
-              display: "grid",
-              gap: 12,
-              border: "1px solid #eee",
-              borderRadius: 12,
-              padding: 16,
-              background: "#fff",
-              marginBottom: 16,
-            }}
-          >
-            <div style={{ fontWeight: 700 }}>Actualizar producto existente</div>
+  id="actualizar"   // ✅ ancla para el header
+  style={{
+    display: "grid",
+    gap: 12,
+    border: "1px solid #eee",
+    borderRadius: 12,
+    padding: 16,
+    background: "#fff",
+    marginBottom: 16,
+  }}
+>
+  <div style={{ fontWeight: 700 }}>Actualizar producto existente</div>
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               <select

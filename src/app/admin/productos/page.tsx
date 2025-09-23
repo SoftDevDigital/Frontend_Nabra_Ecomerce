@@ -4,6 +4,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
+// ⬇️⬇️⬇️ AGREGADO
+import { resolveImageUrls } from "@/lib/resolveImageUrls";
+// ⬆️⬆️⬆️
 
 type ProductIn = {
   name: string;
@@ -76,6 +79,9 @@ export default function AdminCreateProductPage() {
   const [creating, setCreating] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [created, setCreated] = useState<ProductOut | null>(null);
+  // ⬇️⬇️⬇️ AGREGADO
+  const [createdImgs, setCreatedImgs] = useState<string[]>([]);
+  // ⬆️⬆️⬆️
 
   useEffect(() => {
     setIsAdmin(isAdminFromToken());
@@ -92,6 +98,9 @@ export default function AdminCreateProductPage() {
     e.preventDefault();
     setMsg(null);
     setCreated(null);
+    // ⬇️⬇️⬇️ AGREGADO: limpiamos la previsualización previa
+    setCreatedImgs([]);
+    // ⬆️⬆️⬆️
 
     // Validaciones mínimas
     const p = Number(price);
@@ -140,6 +149,15 @@ export default function AdminCreateProductPage() {
 
       setCreated(r.data);
       setMsg("Producto creado ✅");
+
+      // ⬇️⬇️⬇️ AGREGADO: resolver URLs de imágenes del producto creado
+      try {
+        const urls = await resolveImageUrls(r.data.images ?? []);
+        setCreatedImgs(urls);
+      } catch {
+        // silencioso: si falla, no rompe la creación
+      }
+      // ⬆️⬆️⬆️
 
       // Opcional: limpiar formulario manteniendo flags
       setName("");
@@ -342,9 +360,25 @@ export default function AdminCreateProductPage() {
             <div><strong>Categoría:</strong> {created.category}</div>
             <div><strong>Stock:</strong> {created.stock}</div>
             <div><strong>Sizes:</strong> {created.sizes?.join(", ")}</div>
+
             {!!created.images?.length && (
               <div><strong>Imágenes:</strong> {created.images.join(", ")}</div>
             )}
+
+            {/* ⬇️⬇️⬇️ AGREGADO: galería de previsualización */}
+            {!!createdImgs.length && (
+              <div style={{ display:"grid", gap:10, gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", marginTop:8 }}>
+                {createdImgs.map((src, i) => (
+                  <img
+                    key={src+i}
+                    src={src}
+                    alt={`${created.name} ${i+1}`}
+                    style={{ width:"100%", aspectRatio:"1/1", objectFit:"cover", borderRadius:8, border:"1px solid #e6e6e6" }}
+                  />
+                ))}
+              </div>
+            )}
+            {/* ⬆️⬆️⬆️ */}
             <div>
               <strong>Flags:</strong> preorder={String(created.isPreorder)} • featured={String(created.isFeatured)}
             </div>

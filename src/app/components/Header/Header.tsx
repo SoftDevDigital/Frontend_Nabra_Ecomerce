@@ -1,18 +1,44 @@
 // src/app/components/Header/Header.tsx
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import AuthDialog from "../Auth/AuthDialog";
 import styles from "./Header.module.css";
 
+/* Helpers: detectar rol admin desde el JWT almacenado */
+function getJwtPayload(): any | null {
+  try {
+    const t = typeof window !== "undefined" ? localStorage.getItem("nabra_token") : null;
+    if (!t) return null;
+    const parts = t.split(".");
+    if (parts.length !== 3) return null;
+    const json = atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"));
+    return JSON.parse(decodeURIComponent(escape(json)));
+  } catch {
+    return null;
+  }
+}
+function isAdminFromToken(): boolean {
+  const p = getJwtPayload();
+  if (!p) return false;
+  const role = p.role || p.roles || p.userRole || p["https://example.com/roles"];
+  if (Array.isArray(role)) return role.map(String).some(r => r.toLowerCase() === "admin");
+  if (typeof role === "string") return role.toLowerCase() === "admin";
+  return false;
+}
+
 export default function Header() {
   const pathname = usePathname();
   const router = useRouter();
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
+
   const [openAuth, setOpenAuth] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => { setIsAdmin(isAdminFromToken()); }, []);
 
   return (
     <>
@@ -29,12 +55,61 @@ export default function Header() {
               <Link href="/catalogo" className={`${styles.link} ${isActive("/catalogo") ? styles.active : ""}`}>Catálogo</Link>
               <Link href="/preventa" className={`${styles.link} ${isActive("/preventa") ? styles.active : ""}`}>Preventa</Link>
               <Link href="/contacto" className={`${styles.link} ${isActive("/contacto") ? styles.active : ""}`}>Contacto</Link>
+
+              {/* ---- Admin links ---- */}
+         {/* ---- Admin links ---- */}
+{isAdmin && (
+  <>
+    <Link
+      href="/admin/media"
+      className={`${styles.link} ${isActive("/admin/media") ? styles.active : ""}`}
+      title="Panel Admin - Medios"
+    >
+      Media
+    </Link>
+
+    <Link
+      href="/admin/pedidos"
+      className={`${styles.link} ${isActive("/admin/pedidos") ? styles.active : ""}`}
+      title="Panel Admin - Pedidos"
+    >
+      Pedidos
+    </Link>
+
+    {/* Crear */}
+    <Link
+      href="/admin/productos/nuevo"
+      className={`${styles.link} ${isActive("/admin/productos/nuevo") ? styles.active : ""}`}
+      title="Crear producto"
+    >
+      Crear producto
+    </Link>
+
+    {/* Actualizar (ancla a la sección de edición) */}
+    <Link
+      href="/admin/productos/nuevo#actualizar"
+      className={`${styles.link} ${isActive("/admin/productos/nuevo") ? styles.active : ""}`}
+      title="Actualizar producto"
+    >
+      Actualizar producto
+    </Link>
+
+    {/* ✅ Nuevo: Eliminar */}
+    <Link
+      href="/admin/productos/eliminar"
+      className={`${styles.link} ${isActive("/admin/productos/eliminar") ? styles.active : ""}`}
+      title="Eliminar producto"
+    >
+      Eliminar producto
+    </Link>
+  </>
+)}
+
             </nav>
           </div>
 
-          {/* DERECHA: iconos */}
+          {/* DER: iconos */}
           <div className={styles.actions} aria-label="Acciones">
-            {/* Buscar (Link) */}
             <Link
               href="/buscar"
               className={`${styles.iconBtn} ${styles.iconBtnSearch} ${styles.iconForce}`}
@@ -48,7 +123,6 @@ export default function Header() {
               </svg>
             </Link>
 
-            {/* Cuenta (button que abre el diálogo) */}
             <button
               type="button"
               onClick={() => setOpenAuth(true)}
@@ -58,13 +132,11 @@ export default function Header() {
               style={{ color: "#111" }}
             >
               <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
-                {/* ← grosor + stroke explícitos */}
                 <circle cx="12" cy="8.5" r="3.5" stroke="currentColor" fill="none" strokeWidth="1.8" />
                 <path d="M4.8 19.2a7.2 7.2 0 0 1 14.4 0" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" />
               </svg>
             </button>
 
-            {/* Carrito */}
             <Link
               href="/carrito"
               className={`${styles.iconBtn} ${styles.iconForce}`}
@@ -81,7 +153,6 @@ export default function Header() {
         </div>
       </header>
 
-      {/* Diálogo de Cuenta */}
       <AuthDialog open={openAuth} onClose={() => setOpenAuth(false)} />
     </>
   );

@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+// ⬇️⬇️⬇️ AGREGADO
+import { resolveImageUrls } from "@/lib/resolveImageUrls";
+// ⬆️⬆️⬆️
 
 type Product = {
   _id: string;
@@ -9,6 +12,7 @@ type Product = {
   description?: string;
   price?: number;
   category?: string;
+  images?: string[]; // ← por si no estaba tipado
   [k: string]: any;
 };
 
@@ -134,6 +138,58 @@ export default function CatalogPage() {
     router.push(`/catalogo?${params.toString()}`);
   }
 
+  /* === Componente interno de tarjeta para poder usar hooks por producto === */
+  function ProductCard({ p }: { p: Product }) {
+    // ⬇️⬇️⬇️ AGREGADO: resolver miniatura de la primera imagen
+    const [thumb, setThumb] = useState<string | null>(null);
+    useEffect(() => {
+      (async () => {
+        const first = Array.isArray(p.images) ? p.images[0] : null;
+        if (!first) { setThumb(null); return; }
+        const [url] = await resolveImageUrls([first]);
+        setThumb(url ?? null);
+      })();
+    }, [p.images]);
+    // ⬆️⬆️⬆️
+
+    return (
+      <article
+        key={p._id}
+        style={{
+          display: "grid",
+          gap: 6,
+          padding: 12,
+          border: "1px solid #eee",
+          borderRadius: 12,
+          background: "#fff",
+        }}
+      >
+        {/* ⬇️⬇️⬇️ AGREGADO: imagen antes del nombre */}
+        {thumb && (
+          <img
+            src={thumb}
+            alt={p.name}
+            style={{ width: "100%", aspectRatio: "1/1", objectFit: "cover", borderRadius: 10, border: "1px solid #eee" }}
+            loading="lazy"
+          />
+        )}
+        {/* ⬆️⬆️⬆️ */}
+        <div style={{ fontWeight: 700 }}>{p.name}</div>
+        {typeof p.price !== "undefined" && (
+          <div style={{ fontWeight: 600, fontSize: 14, opacity: 0.9 }}>
+            Precio: {p.price}
+          </div>
+        )}
+        {p.category && (
+          <div style={{ fontSize: 12, opacity: 0.8 }}>Categoría: {p.category}</div>
+        )}
+        {p.description && (
+          <p style={{ margin: 0, opacity: 0.9 }}>{p.description}</p>
+        )}
+      </article>
+    );
+  }
+
   return (
     <main style={{ maxWidth: 1200, margin: "24px auto", padding: "0 16px" }}>
       <header style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
@@ -235,30 +291,7 @@ export default function CatalogPage() {
             }}
           >
             {items.map((p) => (
-              <article
-                key={p._id}
-                style={{
-                  display: "grid",
-                  gap: 6,
-                  padding: 12,
-                  border: "1px solid #eee",
-                  borderRadius: 12,
-                  background: "#fff",
-                }}
-              >
-                <div style={{ fontWeight: 700 }}>{p.name}</div>
-                {typeof p.price !== "undefined" && (
-                  <div style={{ fontWeight: 600, fontSize: 14, opacity: 0.9 }}>
-                    Precio: {p.price}
-                  </div>
-                )}
-                {p.category && (
-                  <div style={{ fontSize: 12, opacity: 0.8 }}>Categoría: {p.category}</div>
-                )}
-                {p.description && (
-                  <p style={{ margin: 0, opacity: 0.9 }}>{p.description}</p>
-                )}
-              </article>
+              <ProductCard key={p._id} p={p} />
             ))}
           </section>
 
