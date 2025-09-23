@@ -1,0 +1,76 @@
+/* Header */
+.header{
+  position: sticky; top: 0; z-index: 40;
+  background:#fff; border-bottom:1px solid #eee;
+}
+
+/* Grid: [left(logo+nav)] | [iconos] */
+.container{
+  max-width:1200px; margin:0 auto; padding: 14px 16px;
+  display:grid; grid-template-columns: 1fr auto; align-items:center; gap:12px;
+  position:relative;
+}
+
+.left{ display:flex; align-items:center; gap: 20px; min-width:0; }
+
+.brand{ display:inline-flex; align-items:center; line-height:0; flex:0 0 auto; }
+.brand :global(img){ width: clamp(150px, 15vw, 190px); height:auto; }
+
+/* Nav */
+.nav{ display:flex; align-items:center; gap: 28px; flex:1 1 auto; }
+.link{ color:#5f6368; text-decoration:none; font-weight:600; font-size:16px; }
+.link:hover{ text-decoration: underline; }
+.active{ color:#111; font-weight:700; }
+
+/* Iconos derecha */
+.actions{ justify-self:end; display:flex; align-items:center; gap: 22px; }
+
+/* Botón de icono */
+.iconBtn{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:34px; height:34px; border-radius:999px;
+  border:1px solid transparent;
+  background:transparent;
+  color:#111;
+  line-height:0;
+  -webkit-appearance:none; appearance:none;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+
+/* Asegura que TODO trazo del SVG herede el color del botón */
+.iconBtn svg{ display:block; pointer-events:none; }
+.iconBtn svg *{ stroke: currentColor !important; fill: none; }
+
+/* Hover */
+.iconBtn:hover{ background:#f7f7f7; border-color:#e9e9e9; color:#333; }
+
+/* fuerza visibilidad de la lupa */
+.iconBtnSearch{ color:#111; }
+
+/* Fuerza color oscuro incluso si hay dark mode global */
+.iconForce{
+  color:#111 !important;
+  background:transparent !important;
+  border-color:transparent !important;
+}
+@media (prefers-color-scheme: dark){
+  .iconForce{ color:#111 !important; }
+}
+
+/* Breakpoints */
+@media (max-width: 980px){
+  .container{ padding:12px; }
+  .actions{ gap:18px; }
+  .nav{ gap:22px; }
+}
+@media (max-width: 860px){
+  .nav{ display:none; }
+}
+@media (max-width: 390px){
+  .brand :global(img){ width:132px; }
+  .actions{ gap:14px; }
+}
+@media (max-width: 360px){
+  .brand :global(img){ width:118px; }
+  .iconBtn{ width:30px; height:30px; }
+}
