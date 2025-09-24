@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import AuthDialog from "../Auth/AuthDialog";
+import HydrateGoogleOAuth from "@/app/components/Auth/HydrateGoogleOAuth"; // 👈 NUEVO
 import styles from "./Header.module.css";
 
 /* Helpers: detectar rol admin desde el JWT almacenado */
@@ -42,6 +43,9 @@ export default function Header() {
 
   return (
     <>
+      {/* 👇 Procesa ?token&user&login=success si viene del backend */}
+      <HydrateGoogleOAuth />
+
       <header className={styles.header} role="banner">
         <div className={styles.container}>
           {/* IZQ: logo + nav */}
@@ -57,54 +61,52 @@ export default function Header() {
               <Link href="/contacto" className={`${styles.link} ${isActive("/contacto") ? styles.active : ""}`}>Contacto</Link>
 
               {/* ---- Admin links ---- */}
-         {/* ---- Admin links ---- */}
-{isAdmin && (
-  <>
-    <Link
-      href="/admin/media"
-      className={`${styles.link} ${isActive("/admin/media") ? styles.active : ""}`}
-      title="Panel Admin - Medios"
-    >
-      Media
-    </Link>
+              {isAdmin && (
+                <>
+                  <Link
+                    href="/admin/media"
+                    className={`${styles.link} ${isActive("/admin/media") ? styles.active : ""}`}
+                    title="Panel Admin - Medios"
+                  >
+                    Media
+                  </Link>
 
-    <Link
-      href="/admin/pedidos"
-      className={`${styles.link} ${isActive("/admin/pedidos") ? styles.active : ""}`}
-      title="Panel Admin - Pedidos"
-    >
-      Pedidos
-    </Link>
+                  <Link
+                    href="/admin/pedidos"
+                    className={`${styles.link} ${isActive("/admin/pedidos") ? styles.active : ""}`}
+                    title="Panel Admin - Pedidos"
+                  >
+                    Pedidos
+                  </Link>
 
-    {/* Crear */}
-    <Link
-      href="/admin/productos/nuevo"
-      className={`${styles.link} ${isActive("/admin/productos/nuevo") ? styles.active : ""}`}
-      title="Crear producto"
-    >
-      Crear producto
-    </Link>
+                  {/* Crear */}
+                  <Link
+                    href="/admin/productos/nuevo"
+                    className={`${styles.link} ${isActive("/admin/productos/nuevo") ? styles.active : ""}`}
+                    title="Crear producto"
+                  >
+                    Crear producto
+                  </Link>
 
-    {/* Actualizar (ancla a la sección de edición) */}
-    <Link
-      href="/admin/productos/nuevo#actualizar"
-      className={`${styles.link} ${isActive("/admin/productos/nuevo") ? styles.active : ""}`}
-      title="Actualizar producto"
-    >
-      Actualizar producto
-    </Link>
+                  {/* Actualizar (ancla a la sección de edición) */}
+                  <Link
+                    href="/admin/productos/nuevo#actualizar"
+                    className={`${styles.link} ${isActive("/admin/productos/nuevo") ? styles.active : ""}`}
+                    title="Actualizar producto"
+                  >
+                    Actualizar producto
+                  </Link>
 
-    {/* ✅ Nuevo: Eliminar */}
-    <Link
-      href="/admin/productos/eliminar"
-      className={`${styles.link} ${isActive("/admin/productos/eliminar") ? styles.active : ""}`}
-      title="Eliminar producto"
-    >
-      Eliminar producto
-    </Link>
-  </>
-)}
-
+                  {/* ✅ Nuevo: Eliminar */}
+                  <Link
+                    href="/admin/productos/eliminar"
+                    className={`${styles.link} ${isActive("/admin/productos/eliminar") ? styles.active : ""}`}
+                    title="Eliminar producto"
+                  >
+                    Eliminar producto
+                  </Link>
+                </>
+              )}
             </nav>
           </div>
 

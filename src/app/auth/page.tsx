@@ -3,12 +3,13 @@
 import { useState } from "react";
 import styles from "./auth.module.css";
 import { apiFetch } from "@/lib/api";
-import { useRouter } from "next/navigation"; // si ya lo agregaste para login, dejalo
+import { useRouter } from "next/navigation";
+import { startGoogleOAuth } from "@/lib/googleAuth"; // 👈 NUEVO
 
 type LoginBody = { email: string; password: string };
 type RegisterBody = {
   email: string; password: string; name: string;
-  lastName?: string;            // 👈 NUEVO: Apellido en el tipo
+  lastName?: string;
   street?: string; city?: string; zip?: string; country?: string;
 };
 
@@ -16,25 +17,21 @@ export default function AuthPage() {
   const [tab, setTab] = useState<"login"|"register">("login");
   const [login, setLogin] = useState<LoginBody>({ email:"", password:"" });
   const [reg, setReg] = useState<RegisterBody>({
-    email:"", password:"", name:"", lastName:"", // 👈 NUEVO en el estado
+    email:"", password:"", name:"", lastName:"",
     street:"", city:"", zip:"", country:""
   });
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string|null>(null);
   const router = useRouter();
 
-  // ⬅️ agregado: mensaje para la prueba de ruta protegida
   const [protMsg, setProtMsg] = useState<string|null>(null);
 
-  // ⬇️ Helper: separa nombre completo en firstName/lastName
   function splitFullName(full: string) {
     const parts = (full || "").trim().split(/\s+/);
     const firstName = (parts.shift() || "").trim();
     const lastName = (parts.join(" ") || "").trim();
     return { firstName, lastName };
   }
-
-  // ⬇️ NUEVO: normaliza email
   function normalizeEmail(email: string) {
     return (email || "").trim().toLowerCase();
   }
@@ -53,7 +50,7 @@ export default function AuthPage() {
       );
       localStorage.setItem("nabra_token", j.data.access_token ?? "");
       setMsg("¡Bienvenida! Iniciaste sesión.");
-      router.replace("/"); // redirige al inicio
+      router.replace("/");
     } catch (err:any) {
       setMsg(err.message || "Credenciales inválidas.");
     } finally { setLoading(false); }
@@ -63,8 +60,6 @@ export default function AuthPage() {
     e.preventDefault();
     setMsg(null); setLoading(true);
     try {
-      // ⬇️ Construí EXACTAMENTE el payload que tu backend espera
-      // Preferimos el apellido del campo explícito; si viene vacío, hacemos split de name.
       const fromSplit = splitFullName(reg.name);
       const firstName = reg.name?.trim() || fromSplit.firstName;
       const lastName = (reg.lastName?.trim() || fromSplit.lastName || "");
@@ -74,7 +69,6 @@ export default function AuthPage() {
         password: (reg.password || "").trim(),
         firstName,
         lastName,
-        // ⚠️ NO enviar street/city/zip/country porque tu backend los rechaza
       };
 
       const j = await apiFetch<{success:boolean; data:{access_token:string}}>(
@@ -85,14 +79,11 @@ export default function AuthPage() {
       localStorage.setItem("nabra_token", j.data.access_token ?? "");
       setMsg("¡Cuenta creada!");
       setTab("login");
-      // Si querés loguearlo y llevarlo al inicio directamente, podés:
-      // router.replace("/");
     } catch (err:any) {
       setMsg(err.message || "No pudimos registrar la cuenta.");
     } finally { setLoading(false); }
   }
 
-  // ⬅️ agregado: prueba de la ruta protegida GET /auth/protected
   async function handleProtected() {
     setProtMsg(null);
     try {
@@ -102,7 +93,6 @@ export default function AuthPage() {
       );
       setProtMsg(r?.data?.message || "OK");
     } catch (err: any) {
-      // si el backend devuelve 401 -> "No autenticado"
       setProtMsg(err.message || "No autenticado");
     }
   }
@@ -115,6 +105,23 @@ export default function AuthPage() {
                   onClick={()=>setTab("login")}>Iniciar sesión</button>
           <button className={`${styles.tab} ${tab==="register" ? styles.active : ""}`}
                   onClick={()=>setTab("register")}>Crear cuenta</button>
+        </div>
+
+        {/* 👇 NUEVO: botón Google arriba del formulario para ambos tabs */}
+        <div className={styles.socialRow} style={{ marginBottom: 12 }}>
+          <button
+            type="button"
+            className={styles.ghostBtn}
+            onClick={() => startGoogleOAuth(tab === "login" ? "from-login" : "from-register")}
+            aria-label="Continuar con Google"
+          >
+            <span className={styles.iconWrap} aria-hidden>
+              <svg viewBox="0 0 24 24" width="18" height="18">
+                <path d="M21.35 11.1h-9.9v2.98h5.8c-.25 1.5-1.73 4.4-5.8 4.4-3.5 0-6.36-2.9-6.36-6.4s2.86-6.4 6.36-6.4c2 0 3.36.85 4.13 1.58l2.8-2.7C16.83 2.6 14.6 1.7 12.25 1.7 6.9 1.7 2.6 6 2.6 11.35s4.3 9.65 9.65 9.65c5.58 0 9.25-3.92 9.25-9.45 0-.64-.07-1.1-.15-1.45z" fill="currentColor"/>
+              </svg>
+            </span>
+            Continuar con Google
+          </button>
         </div>
 
         {tab==="login" ? (
@@ -144,7 +151,7 @@ export default function AuthPage() {
                 <input
                   value={reg.name}
                   onChange={e=>setReg(s=>({...s, name:e.target.value}))}
-                  autoComplete="given-name"                 // 👈 nombre
+                  autoComplete="given-name"
                   required
                 />
               </label>
@@ -156,14 +163,13 @@ export default function AuthPage() {
               </label>
             </div>
 
-            {/* 👇 NUEVO: fila para Apellido, con un spacer para mantener 2 columnas sin romper nada */}
             <div className={styles.row2}>
               <label className={styles.field}>
                 <span>Apellido</span>
                 <input
                   value={reg.lastName ?? ""}
                   onChange={e=>setReg(s=>({...s, lastName:e.target.value}))}
-                  autoComplete="family-name"               // 👈 apellido
+                  autoComplete="family-name"
                   required
                 />
               </label>
@@ -200,11 +206,10 @@ export default function AuthPage() {
           </form>
         )}
 
-        {/* ⬅️ agregado: caja de prueba para la ruta protegida */}
         <div className={styles.testBox} style={{ marginTop: 16 }}>
           <button
             type="button"
-            className={styles.ghostBtn ?? styles.primary} // usa tu estilo disponible
+            className={styles.ghostBtn ?? styles.primary}
             onClick={handleProtected}
           >
             Probar autenticación (GET /auth/protected)

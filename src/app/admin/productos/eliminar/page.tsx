@@ -23,6 +23,10 @@ type Product = {
 type ListResponse =
   | { success: true; data: Product[]; message?: string }
   | { success: false; message: string }
+  | { products?: Product[]; total?: number; page?: number; totalPages?: number }
+  | { data?: { products?: Product[] } }
+  | { items?: Product[] }
+  | Product[]
   | any;
 
 /* ===== Helpers admin (gateo UI) ===== */
@@ -45,6 +49,13 @@ function isAdminFromToken(): boolean {
   if (Array.isArray(role)) return role.map(String).some((r) => r.toLowerCase() === "admin");
   if (typeof role === "string") return role.toLowerCase() === "admin";
   return false;
+}
+function getBearer(): string | null {
+  try {
+    return typeof window !== "undefined" ? localStorage.getItem("nabra_token") : null;
+  } catch {
+    return null;
+  }
 }
 
 /* ===== Página ===== */
@@ -69,12 +80,35 @@ export default function AdminDeleteProductsPage() {
     setErr(null);
     setGlobalMsg(null);
     try {
-      // Asumimos que GET /products devuelve { success, data: Product[] } o { items: [] }
-      const r = await apiFetch<ListResponse>("/products", { method: "GET" });
-      const arr: Product[] =
-        (Array.isArray((r as any)?.data) && (r as any).data) ||
-        (Array.isArray((r as any)?.items) && (r as any).items) ||
-        [];
+      // 👇 pedimos muchos para alimentar el select/listado
+      const bearer = getBearer();
+      const r = await apiFetch<ListResponse>("/products?limit=200&page=1", {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+        },
+      });
+
+      // 👇 normalizamos formatos comunes
+      let arr: Product[] = [];
+      if (Array.isArray(r)) {
+        arr = r as Product[];
+      } else if (Array.isArray((r as any)?.data)) {
+        arr = (r as any).data;
+      } else if (Array.isArray((r as any)?.items)) {
+        arr = (r as any).items;
+      } else if (Array.isArray((r as any)?.products)) {
+        arr = (r as any).products;
+      } else if (Array.isArray((r as any)?.data?.products)) {
+        arr = (r as any).data.products;
+      } else if ((r as any)?.success === false) {
+        throw new Error((r as any)?.message || "Error al listar productos");
+      } else {
+        const maybeArray = Object.values(r || {}).find((v) => Array.isArray(v)) as Product[] | undefined;
+        if (Array.isArray(maybeArray)) arr = maybeArray;
+      }
+
       setProducts(arr);
     } catch (e: any) {
       const msg = e?.message || "No se pudieron obtener los productos";
@@ -110,12 +144,22 @@ export default function AdminDeleteProductsPage() {
     setGlobalMsg(null);
     setDeletingId(id);
     try {
-      // DELETE /products/:id -> 200 vacío
-      await apiFetch<unknown>(`/products/${id}`, { method: "DELETE" });
+      const bearer = getBearer();
+      // DELETE /products/:id -> puede devolver { message } o 200/204 sin body
+      const res = await apiFetch<any>(`/products/${id}`, {
+        method: "DELETE",
+        headers: {
+          Accept: "application/json",
+          ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+        },
+      });
 
       // Quitamos de la lista local
       setProducts((prev) => prev.filter((p) => p._id !== id));
-      setGlobalMsg("Producto eliminado 🗑️");
+
+      const okMsg =
+        (res && (res.message || res.msg || res.detail)) || "Product deleted successfully";
+      setGlobalMsg(`${okMsg} 🗑️`);
     } catch (e: any) {
       // 403: "Se requiere rol de administrador"
       // 404: "Producto no encontrado"

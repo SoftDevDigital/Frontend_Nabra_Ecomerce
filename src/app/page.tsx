@@ -1,9 +1,9 @@
-// src/app/page.tsx
-export const dynamic = "force-dynamic"; // 👈 fuerza render dinámico (sin cache)
+export const dynamic = "force-dynamic";
 
 import styles from "./page.module.css";
 import Hero from "./components/Hero/Hero";
-import Featured from "./components/Featured/Featured"; // ⬅️ NUEVO
+import Featured from "./components/Featured/Featured";
+import Footer from "./components/Footer/Footer"; // ⬅️ NUEVO
 
 export default function Home() {
   return (
@@ -21,9 +21,10 @@ export default function Home() {
         </div>
       </div>
 
-      {/* ⬇️ Reemplazo del placeholder por la grilla real de destacados */}
       <Featured />
+
+      {/* ⬇️ Footer nuevo */}
+      <Footer />
     </main>
   );
 }
-

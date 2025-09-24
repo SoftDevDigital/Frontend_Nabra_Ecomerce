@@ -32,6 +32,27 @@ type Order = {
   shippingAddress: { street: string; city: string; zip: string; country: string };
 };
 
+/* 🔹 NUEVO: tipos para tracking de envíos (GET /shipping/tracking/:trackingNumber) */
+type TrackingEvent = {
+  timestamp: string;
+  status: string;
+  description?: string;
+  location?: string;
+};
+type TrackingResponse = {
+  trackingNumber: string;
+  status: string;
+  estimatedDelivery?: string;
+  currentLocation?: string;
+  history?: TrackingEvent[];
+};
+/* 🔹 NUEVO: helper local para llamar al endpoint de tracking */
+async function trackShipment(trackingNumber: string): Promise<TrackingResponse> {
+  return apiFetch<TrackingResponse>(`/shipping/tracking/${encodeURIComponent(trackingNumber)}`, {
+    method: "GET",
+  });
+}
+
 type OrdersResponse =
   | { success: true; data: Order[]; message?: string }
   | { success: false; message: string };
@@ -77,6 +98,12 @@ export default function AdminOrdersPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [globalMsg, setGlobalMsg] = useState<string | null>(null);
 
+  /* 🔹 NUEVO: estados UI por pedido para consultar tracking */
+  const [trkInput, setTrkInput] = useState<Record<string, string>>({});
+  const [trkLoading, setTrkLoading] = useState<Record<string, boolean>>({});
+  const [trkErr, setTrkErr] = useState<Record<string, string | null>>({});
+  const [trkData, setTrkData] = useState<Record<string, TrackingResponse | null>>({});
+
   useEffect(() => {
     setIsAdmin(isAdminFromToken());
   }, []);
@@ -95,6 +122,17 @@ export default function AdminOrdersPage() {
       const draft: Record<string, OrderStatus> = {};
       r.data.forEach((o) => (draft[o._id] = o.status));
       setEditing(draft);
+
+      // 🔹 precargar inputs de tracking si el pedido ya trae trackingNumber (directo o dentro de shippingInfo)
+      const ti: Record<string, string> = {};
+      r.data.forEach((o) => {
+        const tn =
+          (o as any)?.trackingNumber ||
+          (o as any)?.shippingInfo?.trackingNumber ||
+          "";
+        if (tn) ti[o._id] = String(tn);
+      });
+      setTrkInput((s) => ({ ...ti, ...s }));
     } catch (e: any) {
       const msg = e?.message || "No se pudieron obtener los pedidos";
       setErr(msg);
@@ -143,6 +181,37 @@ export default function AdminOrdersPage() {
       }
     } finally {
       setSavingId(null);
+    }
+  }
+
+  /* 🔹 NUEVO: resolver trackingNumber desde pedido o input */
+  function resolveTrackingNumber(o: Order, orderId: string): string {
+    return (
+      trkInput[orderId]?.trim() ||
+      (o as any)?.trackingNumber ||
+      (o as any)?.shippingInfo?.trackingNumber ||
+      ""
+    );
+  }
+
+  /* 🔹 NUEVO: handler para consultar GET /shipping/tracking/:trackingNumber */
+  async function handleTrack(orderId: string) {
+    const order = orders.find((x) => x._id === orderId);
+    const tn = order ? resolveTrackingNumber(order, orderId) : "";
+    if (!tn) {
+      setTrkErr((s) => ({ ...s, [orderId]: "No hay trackingNumber para consultar" }));
+      return;
+    }
+    setTrkErr((s) => ({ ...s, [orderId]: null }));
+    setTrkLoading((s) => ({ ...s, [orderId]: true }));
+    try {
+      const r = await trackShipment(tn);
+      setTrkData((s) => ({ ...s, [orderId]: r }));
+    } catch (e: any) {
+      setTrkData((s) => ({ ...s, [orderId]: null }));
+      setTrkErr((s) => ({ ...s, [orderId]: e?.message || "No se pudo obtener el tracking" }));
+    } finally {
+      setTrkLoading((s) => ({ ...s, [orderId]: false }));
     }
   }
 
@@ -280,6 +349,99 @@ export default function AdminOrdersPage() {
                       </button>
                     </div>
                   </div>
+
+                  {/* 🔹 NUEVO: Bloque de tracking del envío */}
+                  <div
+                    style={{
+                      marginTop: 8,
+                      paddingTop: 8,
+                      borderTop: "1px dashed #eee",
+                      display: "grid",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <label style={{ fontSize: 13, opacity: 0.85 }}>Tracking:</label>
+                      <input
+                        value={trkInput[o._id] ?? ((o as any)?.trackingNumber || (o as any)?.shippingInfo?.trackingNumber || "")}
+                        onChange={(e) =>
+                          setTrkInput((s) => ({
+                            ...s,
+                            [o._id]: e.target.value,
+                          }))
+                        }
+                        placeholder="TRK123456789"
+                        style={{ padding: "6px 8px", borderRadius: 8, border: "1px solid #ddd", minWidth: 220 }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleTrack(o._id)}
+                        disabled={!!trkLoading[o._id]}
+                        style={{
+                          padding: "8px 12px",
+                          borderRadius: 8,
+                          border: "1px solid #ddd",
+                          background: trkLoading[o._id] ? "#f3f3f3" : "white",
+                          cursor: trkLoading[o._id] ? "default" : "pointer",
+                          fontWeight: 600,
+                        }}
+                        title="Consultar tracking (GET /shipping/tracking/:trackingNumber)"
+                      >
+                        {trkLoading[o._id] ? "Consultando…" : "Consultar tracking"}
+                      </button>
+
+                      {trkErr[o._id] && (
+                        <span style={{ color: "crimson" }}>{trkErr[o._id]}</span>
+                      )}
+                    </div>
+
+                    {/* Resultado del tracking */}
+                    {trkData[o._id] && (
+                      <div
+                        style={{
+                          border: "1px solid #eef2ff",
+                          background: "#f8faff",
+                          borderRadius: 10,
+                          padding: 10,
+                          display: "grid",
+                          gap: 6,
+                        }}
+                      >
+                        <div style={{ fontWeight: 700 }}>
+                          {trkData[o._id]?.trackingNumber}
+                        </div>
+                        <div>
+                          <strong>Estado:</strong> {trkData[o._id]?.status}
+                          {trkData[o._id]?.currentLocation && (
+                            <> &nbsp;•&nbsp; <strong>Ubicación:</strong> {trkData[o._id]?.currentLocation}</>
+                          )}
+                          {trkData[o._id]?.estimatedDelivery && (
+                            <> &nbsp;•&nbsp; <strong>ETA:</strong> {new Date(trkData[o._id]!.estimatedDelivery!).toLocaleString("es-AR")}</>
+                          )}
+                        </div>
+
+                        {Array.isArray(trkData[o._id]?.history) && trkData[o._id]!.history!.length > 0 && (
+                          <div>
+                            <div style={{ fontWeight: 600, marginBottom: 4 }}>Historial</div>
+                            <ul style={{ margin: 0, paddingLeft: 18 }}>
+                              {trkData[o._id]!.history!.map((h, i) => (
+                                <li key={i} style={{ marginBottom: 2 }}>
+                                  <span style={{ opacity: 0.8 }}>
+                                    {new Date(h.timestamp).toLocaleString("es-AR")}
+                                  </span>
+                                  {" — "}
+                                  <strong>{h.status}</strong>
+                                  {h.description ? `: ${h.description}` : ""}
+                                  {h.location ? ` · ${h.location}` : ""}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {/* 🔹 FIN tracking */}
                 </article>
               ))}
             </div>

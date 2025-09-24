@@ -15,6 +15,7 @@ type ProductIn = {
   stock: number;
   isPreorder?: boolean;
   isFeatured?: boolean;
+  isActive?: boolean; // 👈 agregado
 };
 
 type ProductOut = {
@@ -28,6 +29,8 @@ type ProductOut = {
   stock: number;
   isPreorder: boolean;
   isFeatured: boolean;
+  isActive?: boolean;   // 👈 agregado
+  updatedAt?: string;   // 👈 agregado (para mostrar luego)
   [k: string]: any;
 };
 
@@ -35,11 +38,15 @@ type CreateResponse =
   | { success: true; data: ProductOut; message?: string }
   | { success: false; message: string };
 
-// Para listar productos
+// Para listar productos — ampliamos para cubrir más formatos
 type ListResponse =
   | { success: true; data: ProductOut[]; message?: string }
   | { success: false; message: string }
-  | any; // tolerante a APIs que devuelven {items:[]}
+  | { products?: ProductOut[]; total?: number; page?: number; totalPages?: number }
+  | { data?: { products?: ProductOut[] } }
+  | { items?: ProductOut[] }
+  | ProductOut[]
+  | any;
 
 /* ===== Helpers para detectar admin desde el JWT (gateo UI) ===== */
 function getJwtPayload(): any | null {
@@ -62,6 +69,13 @@ function isAdminFromToken(): boolean {
   if (typeof role === "string") return role.toLowerCase() === "admin";
   return false;
 }
+function getBearer(): string | null {
+  try {
+    return typeof window !== "undefined" ? localStorage.getItem("nabra_token") : null;
+  } catch {
+    return null;
+  }
+}
 /* =============================================================== */
 
 export default function AdminCreateProductPage() {
@@ -77,6 +91,7 @@ export default function AdminCreateProductPage() {
   const [stock, setStock] = useState<number | "">("");
   const [isPreorder, setIsPreorder] = useState(false);
   const [isFeatured, setIsFeatured] = useState(false);
+  const [isActive, setIsActive] = useState<boolean>(true); // 👈 NUEVO
 
   // UI state
   const [creating, setCreating] = useState(false);
@@ -126,20 +141,47 @@ export default function AdminCreateProductPage() {
     setStock(typeof p.stock === "number" ? p.stock : "");
     setIsPreorder(Boolean(p.isPreorder));
     setIsFeatured(Boolean(p.isFeatured));
+    setIsActive(typeof p.isActive === "boolean" ? p.isActive : true);
   }
 
   async function loadAllProducts() {
     try {
       setLoadingProducts(true);
-      // Asumimos GET /products devuelve { success, data: ProductOut[] }
-      const r = await apiFetch<ListResponse>("/products", { method: "GET" });
-      const arr: ProductOut[] =
-        (Array.isArray((r as any)?.data) && (r as any).data) ||
-        (Array.isArray((r as any)?.items) && (r as any).items) ||
-        [];
+
+      // 👇 pedimos muchos para el select
+      const bearer = getBearer();
+      const r = await apiFetch<ListResponse>("/products?limit=200&page=1", {
+        method: "GET",
+        headers: {
+          "Accept": "application/json",
+          ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+        },
+      });
+
+      // 👇 normalizamos formatos comunes
+      let arr: ProductOut[] = [];
+      if (Array.isArray(r)) {
+        arr = r as ProductOut[];
+      } else if (Array.isArray((r as any)?.data)) {
+        arr = (r as any).data;
+      } else if (Array.isArray((r as any)?.items)) {
+        arr = (r as any).items;
+      } else if (Array.isArray((r as any)?.products)) {
+        arr = (r as any).products;
+      } else if (Array.isArray((r as any)?.data?.products)) {
+        arr = (r as any).data.products;
+      } else if ((r as any)?.success === false) {
+        throw new Error((r as any)?.message || "Error al listar productos");
+      } else {
+        // último intento: si es objeto con una propiedad array cualquiera
+        const maybeArray = Object.values(r || {}).find((v) => Array.isArray(v)) as ProductOut[] | undefined;
+        if (Array.isArray(maybeArray)) arr = maybeArray;
+      }
+
       setAllProducts(arr);
     } catch (e: any) {
       setMsg(e?.message || "No se pudo cargar la lista de productos");
+      setAllProducts([]);
     } finally {
       setLoadingProducts(false);
     }
@@ -150,7 +192,6 @@ export default function AdminCreateProductPage() {
     setMsg(null);
     setCreated(null);
 
-    // Validaciones mínimas
     const p = Number(price);
     const s = Number(stock);
     if (!name.trim() || !description.trim() || !category.trim()) {
@@ -181,6 +222,7 @@ export default function AdminCreateProductPage() {
       ...(images.length ? { images } : {}),
       ...(isPreorder ? { isPreorder: true } : {}),
       ...(isFeatured ? { isFeatured: true } : {}),
+      ...(typeof isActive === "boolean" ? { isActive } : {}),
     };
 
     setCreating(true);
@@ -234,13 +276,28 @@ export default function AdminCreateProductPage() {
 
     setLoadingEdit(true);
     try {
-      const r = await apiFetch<CreateResponse>(`/products/${id}`, { method: "GET" });
+      const bearer = getBearer();
+      const r = await apiFetch<CreateResponse | ProductOut>(`/products/${id}`, {
+        method: "GET",
+        headers: {
+          "Accept": "application/json",
+          ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+        },
+      });
 
-      if (!("success" in r) || !r.success) {
-        throw new Error(("message" in r && r.message) || "No se pudo cargar el producto");
+      // tolerar plano o { success, data }
+      let prod: ProductOut | null = null;
+      if (typeof (r as any)?.success === "boolean") {
+        const rr = r as CreateResponse;
+        if (!rr.success) throw new Error(rr.message || "No se pudo cargar el producto");
+        prod = rr.data;
+      } else {
+        const plain = r as ProductOut;
+        if (plain && plain._id) prod = plain;
       }
+      if (!prod) throw new Error("Respuesta inesperada del servidor");
 
-      fillFormFromProduct(r.data);
+      fillFormFromProduct(prod);
       setEditing(true);
       setMsg("Producto cargado para edición. Podés modificar y guardar.");
     } catch (err: any) {
@@ -251,77 +308,85 @@ export default function AdminCreateProductPage() {
     }
   }
 
-  async function handleUpdate(e: React.FormEvent) {
-    e.preventDefault();
+ async function handleUpdate(e: React.FormEvent) {
+  e.preventDefault();
 
-    setMsg(null);
-    setCreated(null);
+  setMsg(null);
+  setCreated(null);
 
-    const id = (editId || "").trim();
-    if (!id) {
-      setMsg("Falta seleccionar el producto para actualizar.");
-      return;
-    }
-
-    const p = Number(price);
-    const s = Number(stock);
-    if (!name.trim() || !description.trim() || !category.trim()) {
-      setMsg("Completá nombre, descripción y categoría.");
-      return;
-    }
-    if (!Number.isFinite(p) || p <= 0) {
-      setMsg("Precio inválido.");
-      return;
-    }
-    if (!Number.isFinite(s) || s < 0) {
-      setMsg("Stock inválido.");
-      return;
-    }
-    const sizes = parseCsvToArray(sizesText);
-    if (!sizes.length) {
-      setMsg("Ingresá al menos un talle en “sizes”.");
-      return;
-    }
-    const images = parseCsvToArray(imagesText);
-
-    const body: Partial<ProductIn> = {
-      name: name.trim(),
-      description: description.trim(),
-      price: p,
-      category: category.trim(),
-      sizes,
-      stock: s,
-      ...(images.length ? { images } : { images: [] }),
-      ...(isPreorder ? { isPreorder: true } : { isPreorder: false }),
-      ...(isFeatured ? { isFeatured: true } : { isFeatured: false }),
-    };
-
-    setUpdating(true);
-    try {
-      const r = await apiFetch<CreateResponse>(`/products/${id}`, {
-        method: "PUT",
-        body: JSON.stringify(body),
-      });
-
-      if (!("success" in r) || !r.success) {
-        throw new Error(("message" in r && r.message) || "No se pudo actualizar el producto");
-      }
-
-      setCreated(r.data);
-      setMsg("Producto actualizado ✅");
-
-      // refresco nombres del select por si cambiaron
-      void loadAllProducts();
-    } catch (err: any) {
-      const m = err?.message || "No se pudo actualizar el producto";
-      setMsg(m);
-      if (m.toLowerCase().includes("no autenticado") || m.toLowerCase().includes("credenciales")) {
-        window.location.href = "/auth?redirectTo=/admin/productos/nuevo";
-      }
-    } finally {
-      setUpdating(false);
-    }
+  const id = (editId || "").trim();
+  if (!id) {
+    setMsg("Falta seleccionar el producto para actualizar.");
+    return;
   }
+
+  const p = Number(price);
+  const s = Number(stock);
+  if (!Number.isFinite(p) || p <= 0) {
+    setMsg("Precio inválido.");
+    return;
+  }
+  if (!Number.isFinite(s) || s < 0) {
+    setMsg("Stock inválido.");
+    return;
+  }
+
+  const sizes = parseCsvToArray(sizesText);
+  const images = parseCsvToArray(imagesText);
+
+  // 🚫 IMPORTANTE: el backend NO acepta isActive en PUT, así que lo omitimos
+  const bodyFull: Partial<ProductIn> = {
+    price: p,
+    stock: s,
+    // isActive, // <- NO LO MANDAMOS EN PUT
+    // Enviamos también el resto por idempotencia
+    name: name.trim(),
+    description: description.trim(),
+    category: category.trim(),
+    ...(sizes.length ? { sizes } : {}),
+    ...(images.length ? { images } : { images: [] }),
+    isPreorder,
+    isFeatured,
+  };
+
+  setUpdating(true);
+  try {
+    const bearer = getBearer();
+    const r = await apiFetch<CreateResponse | ProductOut>(`/products/${id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+      },
+      body: JSON.stringify(bodyFull),
+    });
+
+    let updated: ProductOut | null = null;
+    if (typeof (r as any)?.success === "boolean") {
+      const rr = r as CreateResponse;
+      if (!rr.success) throw new Error(rr.message || "No se pudo actualizar el producto");
+      updated = rr.data;
+    } else {
+      const plain = r as ProductOut;
+      if (plain && plain._id) updated = plain;
+    }
+    if (!updated) throw new Error("Respuesta inesperada del servidor");
+
+    setCreated(updated);
+    setMsg("Producto actualizado ✅");
+    void loadAllProducts();
+  } catch (err: any) {
+    const m = err?.message || "No se pudo actualizar el producto";
+    setMsg(m);
+    if (/(401|403|no autenticado|credenciales|unauthorized|forbidden)/i.test(m)) {
+      window.location.href = "/auth?redirectTo=/admin/productos/nuevo";
+    }
+  } finally {
+    setUpdating(false);
+  }
+}
+
 
   // ====== NUEVO: POST /products/:id/images (agregar una imagen al producto) ======
   async function handleAddImageToProduct() {
@@ -353,10 +418,7 @@ export default function AdminCreateProductPage() {
       setMsg("Imagen agregada al producto ✅");
       setAddImageUrl("");
 
-      // refrescamos el producto cargado para ver la imagen nueva
       await handleLoadForEdit(id);
-
-      // sincronizamos el CSV mostrado si corresponde
       setImagesText((prev) => (prev ? `${prev},${url}` : url));
     } catch (err: any) {
       const m = err?.message || "No se pudo adjuntar la imagen";
@@ -383,6 +445,7 @@ export default function AdminCreateProductPage() {
     setStock("");
     setIsPreorder(false);
     setIsFeatured(false);
+    setIsActive(true);
   }
 
   return (
@@ -408,18 +471,18 @@ export default function AdminCreateProductPage() {
         <>
           {/* ====== Selección por lista para editar ====== */}
           <section
-  id="actualizar"   // ✅ ancla para el header
-  style={{
-    display: "grid",
-    gap: 12,
-    border: "1px solid #eee",
-    borderRadius: 12,
-    padding: 16,
-    background: "#fff",
-    marginBottom: 16,
-  }}
->
-  <div style={{ fontWeight: 700 }}>Actualizar producto existente</div>
+            id="actualizar"
+            style={{
+              display: "grid",
+              gap: 12,
+              border: "1px solid #eee",
+              borderRadius: 12,
+              padding: 16,
+              background: "#fff",
+              marginBottom: 16,
+            }}
+          >
+            <div style={{ fontWeight: 700 }}>Actualizar producto existente</div>
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               <select
@@ -439,7 +502,7 @@ export default function AdminCreateProductPage() {
                 disabled={loadingProducts}
               >
                 <option value="">
-                  {loadingProducts ? "Cargando productos…" : "Seleccioná un producto…"}
+                  {loadingProducts ? "Cargando productos…" : (allProducts.length ? "Seleccioná un producto…" : "No hay productos cargados")}
                 </option>
                 {allProducts.map((p) => (
                   <option key={p._id} value={p._id}>
@@ -653,6 +716,16 @@ export default function AdminCreateProductPage() {
                 <span>isFeatured</span>
               </label>
 
+              {/* 👇 NUEVO: activar/desactivar producto */}
+              <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={isActive}
+                  onChange={(e) => setIsActive(e.target.checked)}
+                />
+                <span>isActive</span>
+              </label>
+
               {!editing ? (
                 <button
                   type="submit"
@@ -717,6 +790,12 @@ export default function AdminCreateProductPage() {
             <div><strong>Categoría:</strong> {created.category}</div>
             <div><strong>Stock:</strong> {created.stock}</div>
             <div><strong>Sizes:</strong> {created.sizes?.join(", ")}</div>
+            {"isActive" in created && (
+              <div><strong>Activo:</strong> {String(created.isActive)}</div>
+            )}
+            {"updatedAt" in created && created.updatedAt && (
+              <div><strong>Actualizado:</strong> {new Date(created.updatedAt).toLocaleString("es-AR")}</div>
+            )}
             {!!created.images?.length && (
               <div><strong>Imágenes:</strong> {created.images.join(", ")}</div>
             )}

@@ -1,348 +1,484 @@
+// src/app/catalogo/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-// ⬇️⬇️⬇️ AGREGADO
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import {
+  fetchProducts,
+  ProductDto,
+  fetchProductCategories,
+  fetchCategoryStats, // 👈 agregado
+  CategoryStats,      // 👈 agregado
+} from "@/lib/productsApi"; // 👈 ahora importa stats
 import { resolveImageUrls } from "@/lib/resolveImageUrls";
-// ⬆️⬆️⬆️
+/* === NUEVO: para agregar al carrito === */
+import { addToCart } from "@/lib/cartClient";
 
-type Product = {
-  _id: string;
-  name: string;
-  description?: string;
-  price?: number;
-  category?: string;
-  images?: string[]; // ← por si no estaba tipado
-  [k: string]: any;
-};
+function currency(n?: number) {
+  if (typeof n !== "number") return "";
+  return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(n);
+}
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3000";
-
-// Helpers
-const toNum = (v: string | null, d: number) => {
-  const n = Number(v ?? "");
-  return Number.isFinite(n) && n > 0 ? n : d;
-};
-
-export default function CatalogPage() {
-  const searchParams = useSearchParams();
+export default function CatalogoPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const sp = useSearchParams();
 
-  // Leer query actual de la URL
-  const qp = useMemo(() => {
-    const page = toNum(searchParams.get("page"), 1);
-    const limit = toNum(searchParams.get("limit"), 10);
-    const category = (searchParams.get("category") || "").trim();
-    const minPrice = searchParams.get("minPrice");
-    const maxPrice = searchParams.get("maxPrice");
-    return {
-      page,
-      limit,
-      category,
-      minPrice: minPrice && minPrice !== "" ? Number(minPrice) : undefined,
-      maxPrice: maxPrice && maxPrice !== "" ? Number(maxPrice) : undefined,
-    };
-  }, [searchParams]);
-
-  // Estado de filtros (controlados por el form)
-  const [page, setPage] = useState(qp.page);
-  const [limit, setLimit] = useState(qp.limit);
-  const [category, setCategory] = useState(qp.category);
-  const [minPrice, setMinPrice] = useState<string>(
-    typeof qp.minPrice === "number" ? String(qp.minPrice) : ""
-  );
-  const [maxPrice, setMaxPrice] = useState<string>(
-    typeof qp.maxPrice === "number" ? String(qp.maxPrice) : ""
-  );
-
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [items, setItems] = useState<Product[]>([]);
+  const [data, setData] = useState<{ products: ProductDto[]; total: number; page: number; totalPages: number }>({
+    products: [],
+    total: 0,
+    page: 1,
+    totalPages: 1,
+  });
+  const [thumbs, setThumbs] = useState<Record<string, string>>({});
 
-  // Sin total del backend, inferimos si hay "siguiente" por largo === limit
-  const hasPrev = qp.page > 1;
-  const hasNext = items.length === qp.limit; // si trae menos que limit, asumimos fin
+  // Estados para categorías
+  const [cats, setCats] = useState<{ category: string; count: number }[]>([]);
+  const [catsLoading, setCatsLoading] = useState(false);
+  const [catsErr, setCatsErr] = useState<string | null>(null);
 
-  // Cuando cambian los searchParams de la URL, actualizamos estados controlados
+  // ✨ NUEVO: estados para stats de categoría
+  const [catStats, setCatStats] = useState<CategoryStats | null>(null);
+  const [catStatsLoading, setCatStatsLoading] = useState(false);
+  const [catStatsErr, setCatStatsErr] = useState<string | null>(null);
+
+  /* === NUEVO: estados para Quick Add === */
+  const [addingId, setAddingId] = useState<string | null>(null);
+  const [addMsgGlobal, setAddMsgGlobal] = useState<string | null>(null);
+  const [sizeById, setSizeById] = useState<Record<string, string>>({});
+  const [colorById, setColorById] = useState<Record<string, string>>({});
+  const [addMsgById, setAddMsgById] = useState<Record<string, string | null>>({});
+  function setCardMsg(id: string, msg: string | null) {
+    setAddMsgById((m) => ({ ...m, [id]: msg }));
+  }
+
+  // Lee filtros desde la URL
+  const query = useMemo(() => {
+    const page = Number(sp.get("page") || "1");
+    const limit = Number(sp.get("limit") || "12");
+    const category = sp.get("category") || undefined;
+    const search = sp.get("search") || undefined;
+    const minPrice = sp.get("minPrice") ? Number(sp.get("minPrice")) : undefined;
+    const maxPrice = sp.get("maxPrice") ? Number(sp.get("maxPrice")) : undefined;
+    const sortBy = (sp.get("sortBy") as any) || undefined;
+    const sortOrder = (sp.get("sortOrder") as any) || undefined;
+    const isFeatured = sp.get("isFeatured") ? sp.get("isFeatured") === "true" : undefined;
+    const isPreorder = sp.get("isPreorder") ? sp.get("isPreorder") === "true" : undefined;
+    const size = sp.get("size") || undefined;
+
+    return { page, limit, category, search, minPrice, maxPrice, sortBy, sortOrder, isFeatured, isPreorder, size };
+  }, [sp]);
+
+  // Productos
   useEffect(() => {
-    setPage(qp.page);
-    setLimit(qp.limit);
-    setCategory(qp.category);
-    setMinPrice(typeof qp.minPrice === "number" ? String(qp.minPrice) : "");
-    setMaxPrice(typeof qp.maxPrice === "number" ? String(qp.maxPrice) : "");
-  }, [qp]);
-
-  // Cargar productos al cambiar query params
-  useEffect(() => {
-    async function load() {
+    let abort = false;
+    (async () => {
       setLoading(true);
       setErr(null);
+      setThumbs({});
       try {
-        const url = new URL(`${API_BASE}/products`);
-        url.searchParams.set("page", String(qp.page));
-        url.searchParams.set("limit", String(qp.limit));
-        if (qp.category) url.searchParams.set("category", qp.category);
-        if (typeof qp.minPrice === "number") url.searchParams.set("minPrice", String(qp.minPrice));
-        if (typeof qp.maxPrice === "number") url.searchParams.set("maxPrice", String(qp.maxPrice));
+        const res = await fetchProducts(query);
+        if (abort) return;
+        setData(res);
 
-        const res = await fetch(url.toString(), { cache: "no-store" });
-
-        const text = await res.text();
-        const json = text ? JSON.parse(text) : null;
-
-        if (!res.ok) throw new Error("No se pudieron obtener los productos");
-
-        let list: Product[] = [];
-        if (Array.isArray(json)) list = json;
-        else if (json?.success === true && Array.isArray(json?.data)) list = json.data;
-        else throw new Error("Formato de respuesta inesperado");
-
-        setItems(list);
+        // resolver imágenes
+        const entries = await Promise.all(
+          res.products.map(async (p) => {
+            if (p.images?.length) {
+              try {
+                const urls = await resolveImageUrls(p.images);
+                if (urls[0]) return [p._id, urls[0]] as const;
+              } catch { /* ignore */ }
+            }
+            return [p._id, "/product-placeholder.jpg"] as const;
+          })
+        );
+        if (!abort) setThumbs(Object.fromEntries(entries));
       } catch (e: any) {
-        setErr(e?.message || "Error al cargar productos");
-        setItems([]);
+        if (!abort) setErr(e?.message || "Error al cargar productos");
       } finally {
-        setLoading(false);
+        if (!abort) setLoading(false);
       }
-    }
+    })();
+    return () => { abort = true; };
+  }, [query]);
 
-    load();
-  }, [qp.page, qp.limit, qp.category, qp.minPrice, qp.maxPrice]);
+  // Categorías
+  useEffect(() => {
+    let abort = false;
+    (async () => {
+      setCatsLoading(true);
+      setCatsErr(null);
+      try {
+        const data = await fetchProductCategories();
+        if (!abort) setCats(data);
+      } catch (e: any) {
+        if (!abort) setCatsErr(e?.message || "Error al cargar categorías");
+      } finally {
+        if (!abort) setCatsLoading(false);
+      }
+    })();
+    return () => { abort = true; };
+  }, []);
 
-  // Enviar filtros (y resetear a page 1 cuando cambian filtros distintos de page)
-  function applyFilters(e: React.FormEvent) {
-    e.preventDefault();
-
-    const min = minPrice.trim();
-    const max = maxPrice.trim();
-    if (min && max && Number(min) > Number(max)) {
-      setErr("minPrice no puede ser mayor que maxPrice");
+  // ✨ NUEVO: Stats por categoría (cuando hay category en la URL)
+  useEffect(() => {
+    let abort = false;
+    const category = query.category;
+    if (!category) {
+      setCatStats(null);
+      setCatStatsErr(null);
+      setCatStatsLoading(false);
       return;
     }
 
-    const params = new URLSearchParams();
-    params.set("page", "1"); // reset page
-    params.set("limit", String(Math.max(1, Number(limit) || 10)));
-    if (category.trim()) params.set("category", category.trim());
-    if (min) params.set("minPrice", String(Math.max(0, Number(min))));
-    if (max) params.set("maxPrice", String(Math.max(0, Number(max))));
+    (async () => {
+      setCatStatsLoading(true);
+      setCatStatsErr(null);
+      try {
+        const stats = await fetchCategoryStats(category);
+        if (!abort) setCatStats(stats);
+      } catch (e: any) {
+        if (!abort) setCatStatsErr(e?.message || "Error al cargar estadísticas de la categoría");
+      } finally {
+        if (!abort) setCatStatsLoading(false);
+      }
+    })();
 
-    router.push(`/catalogo?${params.toString()}`);
+    return () => { abort = true; };
+  }, [query.category]);
+
+  /* === NUEVO: Quick Add handler (talle/color) === */
+  async function handleQuickAdd(p: ProductDto) {
+    const productId = p._id;
+    setAddingId(productId);
+    setAddMsgGlobal(null);
+    setCardMsg(productId, null);
+
+    try {
+      let sizeToSend: string | undefined;
+      if (Array.isArray(p.sizes) && p.sizes.length > 0) {
+        if (p.sizes.length === 1) {
+          sizeToSend = p.sizes[0];
+        } else {
+          const chosen = (sizeById[productId] || "").trim();
+          if (!chosen) {
+            setCardMsg(productId, "Elegí un talle para agregar.");
+            return;
+          }
+          sizeToSend = chosen;
+        }
+      }
+      const colorToSend = (colorById[productId] || "").trim() || undefined;
+
+      await addToCart({ productId, quantity: 1, size: sizeToSend, color: colorToSend });
+      setAddMsgGlobal("Producto agregado ✅");
+      setCardMsg(productId, "Producto agregado ✅");
+    } catch (e: any) {
+      const msg = String(e?.message || "No se pudo agregar");
+      setAddMsgGlobal(msg);
+      setCardMsg(productId, msg);
+      if (msg.toLowerCase().includes("no autenticado")) {
+        router.push(`/auth?redirectTo=/catalogo`);
+      }
+    } finally {
+      setAddingId(null);
+      setTimeout(() => {
+        setAddMsgGlobal(null);
+        setCardMsg(productId, null);
+      }, 2500);
+    }
   }
 
-  // Paginación
-  function goTo(pageNum: number) {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("page", String(Math.max(1, pageNum)));
-    params.set("limit", String(Math.max(1, Number(params.get("limit")) || limit || 10)));
-    router.push(`/catalogo?${params.toString()}`);
+  function setParam(name: string, value?: string) {
+    const usp = new URLSearchParams(sp.toString());
+    if (value === undefined || value === "") usp.delete(name);
+    else usp.set(name, value);
+    // reset a la primera página al cambiar filtros (excepto si cambiamos page)
+    if (name !== "page") usp.set("page", "1");
+    router.replace(`${pathname}?${usp.toString()}`);
   }
 
-  /* === Componente interno de tarjeta para poder usar hooks por producto === */
-  function ProductCard({ p }: { p: Product }) {
-    // ⬇️⬇️⬇️ AGREGADO: resolver miniatura de la primera imagen
-    const [thumb, setThumb] = useState<string | null>(null);
-    useEffect(() => {
-      (async () => {
-        const first = Array.isArray(p.images) ? p.images[0] : null;
-        if (!first) { setThumb(null); return; }
-        const [url] = await resolveImageUrls([first]);
-        setThumb(url ?? null);
-      })();
-    }, [p.images]);
-    // ⬆️⬆️⬆️
-
-    return (
-      <article
-        key={p._id}
-        style={{
-          display: "grid",
-          gap: 6,
-          padding: 12,
-          border: "1px solid #eee",
-          borderRadius: 12,
-          background: "#fff",
-        }}
-      >
-        {/* ⬇️⬇️⬇️ AGREGADO: imagen antes del nombre */}
-        {thumb && (
-          <img
-            src={thumb}
-            alt={p.name}
-            style={{ width: "100%", aspectRatio: "1/1", objectFit: "cover", borderRadius: 10, border: "1px solid #eee" }}
-            loading="lazy"
-          />
-        )}
-        {/* ⬆️⬆️⬆️ */}
-        <div style={{ fontWeight: 700 }}>{p.name}</div>
-        {typeof p.price !== "undefined" && (
-          <div style={{ fontWeight: 600, fontSize: 14, opacity: 0.9 }}>
-            Precio: {p.price}
-          </div>
-        )}
-        {p.category && (
-          <div style={{ fontSize: 12, opacity: 0.8 }}>Categoría: {p.category}</div>
-        )}
-        {p.description && (
-          <p style={{ margin: 0, opacity: 0.9 }}>{p.description}</p>
-        )}
-      </article>
-    );
-  }
+  const { products, total, page, totalPages } = data;
+  const totalAll = cats.reduce((acc, c) => acc + (c.count || 0), 0);
 
   return (
     <main style={{ maxWidth: 1200, margin: "24px auto", padding: "0 16px" }}>
-      <header style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Catálogo</h1>
-      </header>
+      <h1 style={{ fontSize: 28, marginBottom: 12 }}>Catálogo</h1>
 
-      {/* Filtros */}
-      <form
-        onSubmit={applyFilters}
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))",
-          gap: 8,
-          alignItems: "end",
-          marginBottom: 12,
-        }}
-        aria-label="Filtrar catálogo"
-      >
-        <label style={{ display: "grid", gap: 4 }}>
-          <span style={{ fontSize: 13, opacity: 0.8 }}>Categoría</span>
-          <input
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            placeholder="zapatos"
-            style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
-          />
-        </label>
-
-        <label style={{ display: "grid", gap: 4 }}>
-          <span style={{ fontSize: 13, opacity: 0.8 }}>Precio mínimo</span>
-          <input
-            type="number"
-            min={0}
-            value={minPrice}
-            onChange={(e) => setMinPrice(e.target.value)}
-            placeholder="0"
-            style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
-          />
-        </label>
-
-        <label style={{ display: "grid", gap: 4 }}>
-          <span style={{ fontSize: 13, opacity: 0.8 }}>Precio máximo</span>
-          <input
-            type="number"
-            min={0}
-            value={maxPrice}
-            onChange={(e) => setMaxPrice(e.target.value)}
-            placeholder="1000"
-            style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
-          />
-        </label>
-
-        <label style={{ display: "grid", gap: 4 }}>
-          <span style={{ fontSize: 13, opacity: 0.8 }}>Por página</span>
-          <input
-            type="number"
-            min={1}
-            value={limit}
-            onChange={(e) => setLimit(Math.max(1, parseInt(e.target.value || "10", 10)))}
-            style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
-          />
-        </label>
-
+      {/* Chips de categorías */}
+      <section style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "8px 0 12px" }}>
         <button
-          type="submit"
+          onClick={() => setParam("category", undefined)}
           style={{
-            padding: "10px 12px",
-            borderRadius: 10,
+            padding: "6px 10px",
+            borderRadius: 999,
             border: "1px solid #ddd",
-            background: "white",
-            cursor: "pointer",
-            fontWeight: 700,
+            background: !sp.get("category") ? "#111" : "#fff",
+            color: !sp.get("category") ? "#fff" : "#111",
+            cursor: "pointer"
           }}
-          title='Aplicar filtros (GET /products?page=&limit=&category=&minPrice=&maxPrice=)'
+          title={`Todas${totalAll ? ` (${totalAll})` : ""}`}
         >
-          Aplicar
+          {`Todas${totalAll ? ` · ${totalAll}` : ""}`}
         </button>
-      </form>
 
-      {/* Estado de carga / error */}
-      {loading && <p>Cargando productos…</p>}
-      {err && !loading && <p style={{ color: "crimson" }}>{err}</p>}
+        {catsLoading && <span style={{ fontSize: 12, color: "#666" }}>Cargando categorías…</span>}
+        {!catsLoading && catsErr && <span style={{ fontSize: 12, color: "crimson" }}>{catsErr}</span>}
 
-      {/* Lista */}
-      {!loading && !err && items.length === 0 && (
-        <div style={{ border: "1px dashed #ccc", borderRadius: 12, padding: 16 }}>
-          <p style={{ margin: 0 }}>No hay productos para los filtros seleccionados.</p>
-        </div>
+        {!catsLoading && !catsErr && cats.map(c => {
+          const active = sp.get("category") === c.category;
+          return (
+            <button
+              key={c.category}
+              onClick={() => setParam("category", c.category)}
+              style={{
+                padding: "6px 10px",
+                borderRadius: 999,
+                border: "1px solid #ddd",
+                background: active ? "#111" : "#fff",
+                color: active ? "#fff" : "#111",
+                cursor: "pointer"
+              }}
+              title={`${c.category} (${c.count})`}
+            >
+              {c.category} · {c.count}
+            </button>
+          );
+        })}
+      </section>
+
+      {/* ✨ NUEVO: Panel de estadísticas de la categoría seleccionada */}
+      {sp.get("category") && (
+        <section
+          style={{
+            border: "1px solid #eee",
+            borderRadius: 12,
+            padding: 12,
+            background: "#fff",
+            marginBottom: 16
+          }}
+        >
+          {catStatsLoading && <p style={{ margin: 0 }}>Cargando estadísticas…</p>}
+          {!catStatsLoading && catStatsErr && <p style={{ margin: 0, color: "crimson" }}>{catStatsErr}</p>}
+          {!catStatsLoading && !catStatsErr && catStats && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 12, color: "#666" }}>Categoría</div>
+                <div style={{ fontWeight: 600 }}>{catStats.category}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: "#666" }}>Productos</div>
+                <div style={{ fontWeight: 600 }}>{catStats.totalProducts}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: "#666" }}>Precio mín.</div>
+                <div style={{ fontWeight: 600 }}>{currency(catStats.priceRange?.min)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: "#666" }}>Precio máx.</div>
+                <div style={{ fontWeight: 600 }}>{currency(catStats.priceRange?.max)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: "#666" }}>Precio promedio</div>
+                <div style={{ fontWeight: 600 }}>{currency(catStats.averagePrice)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: "#666" }}>Talles disp.</div>
+                <div style={{ fontWeight: 600, lineHeight: 1.3 }}>
+                  {Array.isArray(catStats.availableSizes) && catStats.availableSizes.length
+                    ? catStats.availableSizes.join(", ")
+                    : "-"}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: "#666" }}>Destacados</div>
+                <div style={{ fontWeight: 600 }}>{catStats.featuredProducts}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: "#666" }}>Preventa</div>
+                <div style={{ fontWeight: 600 }}>{catStats.preorderProducts}</div>
+              </div>
+            </div>
+          )}
+        </section>
       )}
 
-      {!loading && !err && items.length > 0 && (
+      {/* Controles de filtros */}
+      <section style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))",
+        gap: 12,
+        marginBottom: 16,
+        border: "1px solid #eee",
+        borderRadius: 12,
+        padding: 12,
+        background: "#fff"
+      }}>
+        <input placeholder="Buscar…" defaultValue={sp.get("search") ?? ""} onBlur={(e) => setParam("search", e.target.value)} />
+        <input placeholder="Categoría (sandalias…)" defaultValue={sp.get("category") ?? ""} onBlur={(e) => setParam("category", e.target.value)} />
+        <input type="number" placeholder="Precio mín." defaultValue={sp.get("minPrice") ?? ""} onBlur={(e) => setParam("minPrice", e.target.value)} />
+        <input type="number" placeholder="Precio máx." defaultValue={sp.get("maxPrice") ?? ""} onBlur={(e) => setParam("maxPrice", e.target.value)} />
+        <input placeholder="Talle (38, 40…)" defaultValue={sp.get("size") ?? ""} onBlur={(e) => setParam("size", e.target.value)} />
+
+        <select defaultValue={sp.get("sortBy") ?? ""} onChange={(e) => setParam("sortBy", e.target.value || undefined)}>
+          <option value="">Ordenar por…</option>
+          <option value="price">Precio</option>
+          <option value="name">Nombre</option>
+          <option value="createdAt">Recientes</option>
+          <option value="relevance">Relevancia</option>
+        </select>
+
+        <select defaultValue={sp.get("sortOrder") ?? "asc"} onChange={(e) => setParam("sortOrder", e.target.value)}>
+          <option value="asc">Asc</option>
+          <option value="desc">Desc</option>
+        </select>
+
+        <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <input
+            type="checkbox"
+            defaultChecked={sp.get("isFeatured") === "true"}
+            onChange={(e) => setParam("isFeatured", e.target.checked ? "true" : undefined)}
+          />
+          Destacados
+        </label>
+
+        <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <input
+            type="checkbox"
+            defaultChecked={sp.get("isPreorder") === "true"}
+            onChange={(e) => setParam("isPreorder", e.target.checked ? "true" : undefined)}
+          />
+          Preventa
+        </label>
+
+        <select
+          defaultValue={sp.get("limit") ?? "12"}
+          onChange={(e) => setParam("limit", e.target.value)}
+          title="Items por página"
+        >
+          {[12, 24, 36, 48].map(n => <option key={n} value={n}>{n} / pág.</option>)}
+        </select>
+      </section>
+
+      {/* Resultados */}
+      {loading && <p>Cargando…</p>}
+      {!loading && err && <p style={{ color: "crimson" }}>{err}</p>}
+      {!loading && !err && (
         <>
-          <section
-            style={{
-              display: "grid",
-              gap: 12,
-              gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))",
-              marginTop: 8,
-            }}
-          >
-            {items.map((p) => (
-              <ProductCard key={p._id} p={p} />
-            ))}
-          </section>
+          <p style={{ marginBottom: 8 }}>{total} resultados</p>
+          <div style={{
+            display: "grid",
+            gap: 12,
+            gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))",
+          }}>
+            {products.map(p => {
+              const needsSizeSelection = Array.isArray(p.sizes) && p.sizes.length > 1;
+              return (
+                <article key={p._id} style={{ border: "1px solid #eee", borderRadius: 12, padding: 12, background: "#fff" }}>
+                  <a href={`/producto/${p._id}`} aria-label={p.name} style={{ display: "block", marginBottom: 8 }}>
+                    <div style={{ width: "100%", aspectRatio: "1/1", overflow: "hidden", borderRadius: 8, border: "1px solid #f0f0f0" }}>
+                      <img
+                        src={thumbs[p._id] || "/product-placeholder.jpg"}
+                        alt={p.name}
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        loading="lazy"
+                      />
+                    </div>
+                  </a>
+                  <h3 style={{ fontSize: 16, margin: "8px 0 4px" }}>{p.name}</h3>
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>{currency(p.price)}</div>
+                  {p.category && <div style={{ fontSize: 12, color: "#666" }}>{p.category}</div>}
+
+                  {/* === NUEVO: selector de talle/color por tarjeta cuando hay varias talles === */}
+                  {needsSizeSelection && (
+                    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                      <label style={{ display: "grid", gap: 4 }}>
+                        <span style={{ fontSize: 12, color: "#666" }}>Talle</span>
+                        <select
+                          value={sizeById[p._id] || ""}
+                          onChange={(e) => setSizeById((s) => ({ ...s, [p._id]: e.target.value }))}
+                          style={{ padding: "6px 8px", borderRadius: 8, border: "1px solid #ddd", minWidth: 120 }}
+                        >
+                          <option value="">Elegí un talle</option>
+                          {p.sizes!.map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label style={{ display: "grid", gap: 4 }}>
+                        <span style={{ fontSize: 12, color: "#666" }}>Color (opcional)</span>
+                        <input
+                          value={colorById[p._id] || ""}
+                          onChange={(e) => setColorById((c) => ({ ...c, [p._id]: e.target.value }))}
+                          placeholder="Rojo, Azul…"
+                          style={{ padding: "6px 8px", borderRadius: 8, border: "1px solid #ddd", minWidth: 120 }}
+                        />
+                      </label>
+                    </div>
+                  )}
+
+                  {/* Botones acción */}
+                  <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                    <a
+                      href={`/producto/${p._id}`}
+                      style={{
+                        padding: "8px 12px",
+                        borderRadius: 10,
+                        border: "1px solid #ddd",
+                        background: "#fff",
+                        fontWeight: 600
+                      }}
+                    >
+                      Ver detalle
+                    </a>
+                    <button
+                      onClick={() => handleQuickAdd(p)}
+                      disabled={
+                        addingId === p._id ||
+                        (needsSizeSelection && !(sizeById[p._id] || "").trim())
+                      }
+                      style={{
+                        padding: "8px 12px",
+                        borderRadius: 10,
+                        border: "1px solid #ddd",
+                        background: "#fff",
+                        fontWeight: 600,
+                        cursor: addingId === p._id ? "default" : "pointer"
+                      }}
+                      title="Agregar al carrito"
+                    >
+                      {addingId === p._id ? "Agregando…" : "Agregar"}
+                    </button>
+                  </div>
+
+                  {/* Mensaje feedback tarjeta */}
+                  {addMsgById[p._id] && (
+                    <div style={{ marginTop: 6, color: addMsgById[p._id]?.includes("✅") ? "green" : "crimson" }}>
+                      {addMsgById[p._id]}
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
 
           {/* Paginación */}
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              alignItems: "center",
-              justifyContent: "flex-end",
-              marginTop: 12,
-            }}
-          >
-            <button
-              type="button"
-              disabled={!hasPrev}
-              onClick={() => hasPrev && goTo(qp.page - 1)}
-              style={{
-                padding: "8px 12px",
-                borderRadius: 8,
-                border: "1px solid #ddd",
-                background: hasPrev ? "white" : "#f3f3f3",
-                cursor: hasPrev ? "pointer" : "default",
-                fontWeight: 600,
-              }}
-              title="Página anterior"
-            >
-              ← Anterior
-            </button>
-
-            <span style={{ fontSize: 14, opacity: 0.85 }}>
-              Página <strong>{qp.page}</strong>
-            </span>
-
-            <button
-              type="button"
-              disabled={!hasNext}
-              onClick={() => hasNext && goTo(qp.page + 1)}
-              style={{
-                padding: "8px 12px",
-                borderRadius: 8,
-                border: "1px solid #ddd",
-                background: hasNext ? "white" : "#f3f3f3",
-                cursor: hasNext ? "pointer" : "default",
-                fontWeight: 600,
-              }}
-              title="Página siguiente"
-            >
-              Siguiente →
-            </button>
+          <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 16 }}>
+            <button disabled={page <= 1} onClick={() => setParam("page", String(page - 1))}>Anterior</button>
+            <span style={{ alignSelf: "center" }}>Página {page} de {totalPages}</span>
+            <button disabled={page >= totalPages} onClick={() => setParam("page", String(page + 1))}>Siguiente</button>
           </div>
+
+          {/* Mensaje global (opcional) */}
+          {addMsgGlobal && (
+            <p style={{ textAlign: "center", marginTop: 12, color: addMsgGlobal.includes("✅") ? "green" : "crimson" }}>
+              {addMsgGlobal}
+            </p>
+          )}
         </>
       )}
     </main>
