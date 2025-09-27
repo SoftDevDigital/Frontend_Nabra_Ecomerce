@@ -7,12 +7,12 @@ import {
   fetchProducts,
   ProductDto,
   fetchProductCategories,
-  fetchCategoryStats, // 👈 agregado
-  CategoryStats,      // 👈 agregado
-} from "@/lib/productsApi"; // 👈 ahora importa stats
+  fetchCategoryStats,
+  CategoryStats,
+} from "@/lib/productsApi";
 import { resolveImageUrls } from "@/lib/resolveImageUrls";
-/* === NUEVO: para agregar al carrito === */
 import { addToCart } from "@/lib/cartClient";
+import s from "./Catalogo.module.css";
 
 function currency(n?: number) {
   if (typeof n !== "number") return "";
@@ -26,25 +26,19 @@ export default function CatalogoPage() {
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [data, setData] = useState<{ products: ProductDto[]; total: number; page: number; totalPages: number }>({
-    products: [],
-    total: 0,
-    page: 1,
-    totalPages: 1,
-  });
+  const [data, setData] = useState<{ products: ProductDto[]; total: number; page: number; totalPages: number }>(
+    { products: [], total: 0, page: 1, totalPages: 1 }
+  );
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
 
-  // Estados para categorías
   const [cats, setCats] = useState<{ category: string; count: number }[]>([]);
   const [catsLoading, setCatsLoading] = useState(false);
   const [catsErr, setCatsErr] = useState<string | null>(null);
 
-  // ✨ NUEVO: estados para stats de categoría
   const [catStats, setCatStats] = useState<CategoryStats | null>(null);
   const [catStatsLoading, setCatStatsLoading] = useState(false);
   const [catStatsErr, setCatStatsErr] = useState<string | null>(null);
 
-  /* === NUEVO: estados para Quick Add === */
   const [addingId, setAddingId] = useState<string | null>(null);
   const [addMsgGlobal, setAddMsgGlobal] = useState<string | null>(null);
   const [sizeById, setSizeById] = useState<Record<string, string>>({});
@@ -54,7 +48,16 @@ export default function CatalogoPage() {
     setAddMsgById((m) => ({ ...m, [id]: msg }));
   }
 
-  // Lee filtros desde la URL
+  // 🔎 Estado controlado para búsqueda en tiempo real
+  const [searchTerm, setSearchTerm] = useState<string>(sp.get("search") ?? "");
+
+  // Mantener input sincronizado si cambian los params (back/forward)
+  useEffect(() => {
+    const current = sp.get("search") ?? "";
+    setSearchTerm((prev) => (prev === current ? prev : current));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sp]); // leer sp, no agregar setters a deps
+
   const query = useMemo(() => {
     const page = Number(sp.get("page") || "1");
     const limit = Number(sp.get("limit") || "12");
@@ -67,7 +70,6 @@ export default function CatalogoPage() {
     const isFeatured = sp.get("isFeatured") ? sp.get("isFeatured") === "true" : undefined;
     const isPreorder = sp.get("isPreorder") ? sp.get("isPreorder") === "true" : undefined;
     const size = sp.get("size") || undefined;
-
     return { page, limit, category, search, minPrice, maxPrice, sortBy, sortOrder, isFeatured, isPreorder, size };
   }, [sp]);
 
@@ -83,7 +85,6 @@ export default function CatalogoPage() {
         if (abort) return;
         setData(res);
 
-        // resolver imágenes
         const entries = await Promise.all(
           res.products.map(async (p) => {
             if (p.images?.length) {
@@ -123,20 +124,16 @@ export default function CatalogoPage() {
     return () => { abort = true; };
   }, []);
 
-  // ✨ NUEVO: Stats por categoría (cuando hay category en la URL)
+  // Stats por categoría
   useEffect(() => {
     let abort = false;
     const category = query.category;
     if (!category) {
-      setCatStats(null);
-      setCatStatsErr(null);
-      setCatStatsLoading(false);
+      setCatStats(null); setCatStatsErr(null); setCatStatsLoading(false);
       return;
     }
-
     (async () => {
-      setCatStatsLoading(true);
-      setCatStatsErr(null);
+      setCatStatsLoading(true); setCatStatsErr(null);
       try {
         const stats = await fetchCategoryStats(category);
         if (!abort) setCatStats(stats);
@@ -146,11 +143,9 @@ export default function CatalogoPage() {
         if (!abort) setCatStatsLoading(false);
       }
     })();
-
     return () => { abort = true; };
   }, [query.category]);
 
-  /* === NUEVO: Quick Add handler (talle/color) === */
   async function handleQuickAdd(p: ProductDto) {
     const productId = p._id;
     setAddingId(productId);
@@ -160,14 +155,10 @@ export default function CatalogoPage() {
     try {
       let sizeToSend: string | undefined;
       if (Array.isArray(p.sizes) && p.sizes.length > 0) {
-        if (p.sizes.length === 1) {
-          sizeToSend = p.sizes[0];
-        } else {
+        if (p.sizes.length === 1) sizeToSend = p.sizes[0];
+        else {
           const chosen = (sizeById[productId] || "").trim();
-          if (!chosen) {
-            setCardMsg(productId, "Elegí un talle para agregar.");
-            return;
-          }
+          if (!chosen) { setCardMsg(productId, "Elegí un talle para agregar."); return; }
           sizeToSend = chosen;
         }
       }
@@ -196,37 +187,42 @@ export default function CatalogoPage() {
     const usp = new URLSearchParams(sp.toString());
     if (value === undefined || value === "") usp.delete(name);
     else usp.set(name, value);
-    // reset a la primera página al cambiar filtros (excepto si cambiamos page)
     if (name !== "page") usp.set("page", "1");
     router.replace(`${pathname}?${usp.toString()}`);
   }
+
+  // Debounce 300ms para búsqueda en tiempo real
+  useEffect(() => {
+    const id = setTimeout(() => {
+      // Actualiza la query string (dispara fetch) cuando el usuario dejó de tipear
+      setParam("search", searchTerm || undefined);
+    }, 300);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm]);
 
   const { products, total, page, totalPages } = data;
   const totalAll = cats.reduce((acc, c) => acc + (c.count || 0), 0);
 
   return (
-    <main style={{ maxWidth: 1200, margin: "24px auto", padding: "0 16px" }}>
-      <h1 style={{ fontSize: 28, marginBottom: 12 }}>Catálogo</h1>
+    <main className={s.page}>
+      <header className={s.header}>
+        <h1 className={s.title}>Catálogo</h1>
+        <p className={s.subtitle}>{total} resultados</p>
+      </header>
 
       {/* Chips de categorías */}
-      <section style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "8px 0 12px" }}>
+      <section className={s.chips}>
         <button
           onClick={() => setParam("category", undefined)}
-          style={{
-            padding: "6px 10px",
-            borderRadius: 999,
-            border: "1px solid #ddd",
-            background: !sp.get("category") ? "#111" : "#fff",
-            color: !sp.get("category") ? "#fff" : "#111",
-            cursor: "pointer"
-          }}
+          className={`${s.chip} ${!sp.get("category") ? s.chipActive : ""}`}
           title={`Todas${totalAll ? ` (${totalAll})` : ""}`}
         >
           {`Todas${totalAll ? ` · ${totalAll}` : ""}`}
         </button>
 
-        {catsLoading && <span style={{ fontSize: 12, color: "#666" }}>Cargando categorías…</span>}
-        {!catsLoading && catsErr && <span style={{ fontSize: 12, color: "crimson" }}>{catsErr}</span>}
+        {catsLoading && <span className={s.muted}>Cargando categorías…</span>}
+        {!catsLoading && catsErr && <span className={s.error}>{catsErr}</span>}
 
         {!catsLoading && !catsErr && cats.map(c => {
           const active = sp.get("category") === c.category;
@@ -234,14 +230,7 @@ export default function CatalogoPage() {
             <button
               key={c.category}
               onClick={() => setParam("category", c.category)}
-              style={{
-                padding: "6px 10px",
-                borderRadius: 999,
-                border: "1px solid #ddd",
-                background: active ? "#111" : "#fff",
-                color: active ? "#fff" : "#111",
-                cursor: "pointer"
-              }}
+              className={`${s.chip} ${active ? s.chipActive : ""}`}
               title={`${c.category} (${c.count})`}
             >
               {c.category} · {c.count}
@@ -250,80 +239,66 @@ export default function CatalogoPage() {
         })}
       </section>
 
-      {/* ✨ NUEVO: Panel de estadísticas de la categoría seleccionada */}
+      {/* Stats de categoría seleccionada */}
       {sp.get("category") && (
-        <section
-          style={{
-            border: "1px solid #eee",
-            borderRadius: 12,
-            padding: 12,
-            background: "#fff",
-            marginBottom: 16
-          }}
-        >
-          {catStatsLoading && <p style={{ margin: 0 }}>Cargando estadísticas…</p>}
-          {!catStatsLoading && catStatsErr && <p style={{ margin: 0, color: "crimson" }}>{catStatsErr}</p>}
+        <section className={s.statsCard}>
+          {catStatsLoading && <p className={s.m0}>Cargando estadísticas…</p>}
+          {!catStatsLoading && catStatsErr && <p className={`${s.m0} ${s.error}`}>{catStatsErr}</p>}
           {!catStatsLoading && !catStatsErr && catStats && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 12 }}>
-              <div>
-                <div style={{ fontSize: 12, color: "#666" }}>Categoría</div>
-                <div style={{ fontWeight: 600 }}>{catStats.category}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 12, color: "#666" }}>Productos</div>
-                <div style={{ fontWeight: 600 }}>{catStats.totalProducts}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 12, color: "#666" }}>Precio mín.</div>
-                <div style={{ fontWeight: 600 }}>{currency(catStats.priceRange?.min)}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 12, color: "#666" }}>Precio máx.</div>
-                <div style={{ fontWeight: 600 }}>{currency(catStats.priceRange?.max)}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 12, color: "#666" }}>Precio promedio</div>
-                <div style={{ fontWeight: 600 }}>{currency(catStats.averagePrice)}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 12, color: "#666" }}>Talles disp.</div>
-                <div style={{ fontWeight: 600, lineHeight: 1.3 }}>
+            <div className={s.statsGrid}>
+              <div><div className={s.k}>Categoría</div><div className={s.v}>{catStats.category}</div></div>
+              <div><div className={s.k}>Productos</div><div className={s.v}>{catStats.totalProducts}</div></div>
+              <div><div className={s.k}>Precio mín.</div><div className={s.v}>{currency(catStats.priceRange?.min)}</div></div>
+              <div><div className={s.k}>Precio máx.</div><div className={s.v}>{currency(catStats.priceRange?.max)}</div></div>
+              <div><div className={s.k}>Promedio</div><div className={s.v}>{currency(catStats.averagePrice)}</div></div>
+              <div><div className={s.k}>Talles disp.</div>
+                <div className={s.v}>
                   {Array.isArray(catStats.availableSizes) && catStats.availableSizes.length
-                    ? catStats.availableSizes.join(", ")
-                    : "-"}
+                    ? catStats.availableSizes.join(", ") : "-"}
                 </div>
               </div>
-              <div>
-                <div style={{ fontSize: 12, color: "#666" }}>Destacados</div>
-                <div style={{ fontWeight: 600 }}>{catStats.featuredProducts}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 12, color: "#666" }}>Preventa</div>
-                <div style={{ fontWeight: 600 }}>{catStats.preorderProducts}</div>
-              </div>
+              <div><div className={s.k}>Destacados</div><div className={s.v}>{catStats.featuredProducts}</div></div>
+              <div><div className={s.k}>Preventa</div><div className={s.v}>{catStats.preorderProducts}</div></div>
             </div>
           )}
         </section>
       )}
 
-      {/* Controles de filtros */}
-      <section style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))",
-        gap: 12,
-        marginBottom: 16,
-        border: "1px solid #eee",
-        borderRadius: 12,
-        padding: 12,
-        background: "#fff"
-      }}>
-        <input placeholder="Buscar…" defaultValue={sp.get("search") ?? ""} onBlur={(e) => setParam("search", e.target.value)} />
-        <input placeholder="Categoría (sandalias…)" defaultValue={sp.get("category") ?? ""} onBlur={(e) => setParam("category", e.target.value)} />
-        <input type="number" placeholder="Precio mín." defaultValue={sp.get("minPrice") ?? ""} onBlur={(e) => setParam("minPrice", e.target.value)} />
-        <input type="number" placeholder="Precio máx." defaultValue={sp.get("maxPrice") ?? ""} onBlur={(e) => setParam("maxPrice", e.target.value)} />
-        <input placeholder="Talle (38, 40…)" defaultValue={sp.get("size") ?? ""} onBlur={(e) => setParam("size", e.target.value)} />
+      {/* Filtros */}
+      <section className={s.filters}>
+        {/* 🔎 Input de búsqueda en tiempo real */}
+        <div className={s.searchWrap}>
+          <input
+            className={`${s.input} ${s.searchInput}`}
+            placeholder="Buscar…"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                // Fuerza búsqueda inmediata y quita el debounce
+                setParam("search", searchTerm || undefined);
+                (e.currentTarget as HTMLInputElement).blur();
+              }
+            }}
+          />
+          {!!searchTerm && (
+            <button
+              type="button"
+              aria-label="Limpiar búsqueda"
+              className={s.clearBtn}
+              onClick={() => setSearchTerm("")}
+            >
+              ✕
+            </button>
+          )}
+        </div>
 
-        <select defaultValue={sp.get("sortBy") ?? ""} onChange={(e) => setParam("sortBy", e.target.value || undefined)}>
+        <input className={s.input} placeholder="Categoría (sandalias…)" defaultValue={sp.get("category") ?? ""} onBlur={(e) => setParam("category", e.target.value)} />
+        <input className={s.input} type="number" placeholder="Precio mín." defaultValue={sp.get("minPrice") ?? ""} onBlur={(e) => setParam("minPrice", e.target.value)} />
+        <input className={s.input} type="number" placeholder="Precio máx." defaultValue={sp.get("maxPrice") ?? ""} onBlur={(e) => setParam("maxPrice", e.target.value)} />
+        <input className={s.input} placeholder="Talle (38, 40…)" defaultValue={sp.get("size") ?? ""} onBlur={(e) => setParam("size", e.target.value)} />
+
+        <select className={s.select} defaultValue={sp.get("sortBy") ?? ""} onChange={(e) => setParam("sortBy", e.target.value || undefined)}>
           <option value="">Ordenar por…</option>
           <option value="price">Precio</option>
           <option value="name">Nombre</option>
@@ -331,12 +306,12 @@ export default function CatalogoPage() {
           <option value="relevance">Relevancia</option>
         </select>
 
-        <select defaultValue={sp.get("sortOrder") ?? "asc"} onChange={(e) => setParam("sortOrder", e.target.value)}>
+        <select className={s.select} defaultValue={sp.get("sortOrder") ?? "asc"} onChange={(e) => setParam("sortOrder", e.target.value)}>
           <option value="asc">Asc</option>
           <option value="desc">Desc</option>
         </select>
 
-        <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <label className={s.check}>
           <input
             type="checkbox"
             defaultChecked={sp.get("isFeatured") === "true"}
@@ -345,7 +320,7 @@ export default function CatalogoPage() {
           Destacados
         </label>
 
-        <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <label className={s.check}>
           <input
             type="checkbox"
             defaultChecked={sp.get("isPreorder") === "true"}
@@ -354,110 +329,78 @@ export default function CatalogoPage() {
           Preventa
         </label>
 
-        <select
-          defaultValue={sp.get("limit") ?? "12"}
-          onChange={(e) => setParam("limit", e.target.value)}
-          title="Items por página"
-        >
+        <select className={s.select} defaultValue={sp.get("limit") ?? "12"} onChange={(e) => setParam("limit", e.target.value)} title="Items por página">
           {[12, 24, 36, 48].map(n => <option key={n} value={n}>{n} / pág.</option>)}
         </select>
       </section>
 
       {/* Resultados */}
       {loading && <p>Cargando…</p>}
-      {!loading && err && <p style={{ color: "crimson" }}>{err}</p>}
+      {!loading && err && <p className={s.error}>{err}</p>}
       {!loading && !err && (
         <>
-          <p style={{ marginBottom: 8 }}>{total} resultados</p>
-          <div style={{
-            display: "grid",
-            gap: 12,
-            gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))",
-          }}>
-            {products.map(p => {
+          <div className={s.grid}>
+            {data.products.map(p => {
               const needsSizeSelection = Array.isArray(p.sizes) && p.sizes.length > 1;
               return (
-                <article key={p._id} style={{ border: "1px solid #eee", borderRadius: 12, padding: 12, background: "#fff" }}>
-                  <a href={`/producto/${p._id}`} aria-label={p.name} style={{ display: "block", marginBottom: 8 }}>
-                    <div style={{ width: "100%", aspectRatio: "1/1", overflow: "hidden", borderRadius: 8, border: "1px solid #f0f0f0" }}>
+                <article key={p._id} className={s.card}>
+                  <a href={`/producto/${p._id}`} aria-label={p.name} className={s.thumbLink}>
+                    <div className={s.thumbBox}>
                       <img
                         src={thumbs[p._id] || "/product-placeholder.jpg"}
                         alt={p.name}
-                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        className={s.thumbImg}
                         loading="lazy"
                       />
                     </div>
                   </a>
-                  <h3 style={{ fontSize: 16, margin: "8px 0 4px" }}>{p.name}</h3>
-                  <div style={{ fontWeight: 600, marginBottom: 6 }}>{currency(p.price)}</div>
-                  {p.category && <div style={{ fontSize: 12, color: "#666" }}>{p.category}</div>}
 
-                  {/* === NUEVO: selector de talle/color por tarjeta cuando hay varias talles === */}
+                  <h3 className={s.cardTitle}>{p.name}</h3>
+                  <div className={s.cardPrice}>{currency(p.price)}</div>
+                  {p.category && <div className={s.cardCat}>{p.category}</div>}
+
                   {needsSizeSelection && (
-                    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                      <label style={{ display: "grid", gap: 4 }}>
-                        <span style={{ fontSize: 12, color: "#666" }}>Talle</span>
+                    <div className={s.inlineSelectors}>
+                      <label className={s.inlineField}>
+                        <span className={s.inlineLabel}>Talle</span>
                         <select
                           value={sizeById[p._id] || ""}
-                          onChange={(e) => setSizeById((s) => ({ ...s, [p._id]: e.target.value }))}
-                          style={{ padding: "6px 8px", borderRadius: 8, border: "1px solid #ddd", minWidth: 120 }}
+                          onChange={(e) => setSizeById((st) => ({ ...st, [p._id]: e.target.value }))}
+                          className={s.inlineSelect}
                         >
                           <option value="">Elegí un talle</option>
-                          {p.sizes!.map((s) => (
-                            <option key={s} value={s}>{s}</option>
+                          {p.sizes!.map((sz) => (
+                            <option key={sz} value={sz}>{sz}</option>
                           ))}
                         </select>
                       </label>
 
-                      <label style={{ display: "grid", gap: 4 }}>
-                        <span style={{ fontSize: 12, color: "#666" }}>Color (opcional)</span>
+                      <label className={s.inlineField}>
+                        <span className={s.inlineLabel}>Color</span>
                         <input
                           value={colorById[p._id] || ""}
                           onChange={(e) => setColorById((c) => ({ ...c, [p._id]: e.target.value }))}
                           placeholder="Rojo, Azul…"
-                          style={{ padding: "6px 8px", borderRadius: 8, border: "1px solid #ddd", minWidth: 120 }}
+                          className={s.inlineInput}
                         />
                       </label>
                     </div>
                   )}
 
-                  {/* Botones acción */}
-                  <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                    <a
-                      href={`/producto/${p._id}`}
-                      style={{
-                        padding: "8px 12px",
-                        borderRadius: 10,
-                        border: "1px solid #ddd",
-                        background: "#fff",
-                        fontWeight: 600
-                      }}
-                    >
-                      Ver detalle
-                    </a>
+                  <div className={s.cardActions}>
+                    <a href={`/producto/${p._id}`} className={s.btn}>Ver detalle</a>
                     <button
                       onClick={() => handleQuickAdd(p)}
-                      disabled={
-                        addingId === p._id ||
-                        (needsSizeSelection && !(sizeById[p._id] || "").trim())
-                      }
-                      style={{
-                        padding: "8px 12px",
-                        borderRadius: 10,
-                        border: "1px solid #ddd",
-                        background: "#fff",
-                        fontWeight: 600,
-                        cursor: addingId === p._id ? "default" : "pointer"
-                      }}
+                      disabled={addingId === p._id || (needsSizeSelection && !(sizeById[p._id] || "").trim())}
+                      className={`${s.btn} ${s.btnPrimary} ${addingId === p._id ? s.btnDisabled : ""}`}
                       title="Agregar al carrito"
                     >
                       {addingId === p._id ? "Agregando…" : "Agregar"}
                     </button>
                   </div>
 
-                  {/* Mensaje feedback tarjeta */}
                   {addMsgById[p._id] && (
-                    <div style={{ marginTop: 6, color: addMsgById[p._id]?.includes("✅") ? "green" : "crimson" }}>
+                    <div className={`${s.feedback} ${addMsgById[p._id]?.includes("✅") ? s.ok : s.err}`}>
                       {addMsgById[p._id]}
                     </div>
                   )}
@@ -466,18 +409,14 @@ export default function CatalogoPage() {
             })}
           </div>
 
-          {/* Paginación */}
-          <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 16 }}>
-            <button disabled={page <= 1} onClick={() => setParam("page", String(page - 1))}>Anterior</button>
-            <span style={{ alignSelf: "center" }}>Página {page} de {totalPages}</span>
-            <button disabled={page >= totalPages} onClick={() => setParam("page", String(page + 1))}>Siguiente</button>
+          <div className={s.pagination}>
+            <button className={s.pageBtn} disabled={page <= 1} onClick={() => setParam("page", String(page - 1))}>Anterior</button>
+            <span className={s.pageInfo}>Página {page} de {totalPages}</span>
+            <button className={s.pageBtn} disabled={page >= totalPages} onClick={() => setParam("page", String(page + 1))}>Siguiente</button>
           </div>
 
-          {/* Mensaje global (opcional) */}
           {addMsgGlobal && (
-            <p style={{ textAlign: "center", marginTop: 12, color: addMsgGlobal.includes("✅") ? "green" : "crimson" }}>
-              {addMsgGlobal}
-            </p>
+            <p className={`${s.center} ${addMsgGlobal.includes("✅") ? s.ok : s.err}`}>{addMsgGlobal}</p>
           )}
         </>
       )}

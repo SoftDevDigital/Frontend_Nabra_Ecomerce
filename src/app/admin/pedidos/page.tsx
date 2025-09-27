@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
+import s from "./AdminOrders.module.css";
 
 /* ========= Tipos ========== */
 type Product = {
@@ -14,10 +15,11 @@ type Product = {
 };
 
 type OrderItem = {
-  product: Product;      // ← poblado por el backend
+  product?: Product | null;
   quantity: number;
   size?: string;
-  price: number;         // precio unitario tomado al crear el pedido
+  price: number;              // precio unitario tomado al crear el pedido
+  productName?: string;       // compat cuando no viene poblado
 };
 
 type OrderStatus = "pending" | "paid" | "shipped" | "delivered" | "cancelled";
@@ -28,17 +30,25 @@ type Order = {
   userId: string;
   cartId: string;
   total: number;
-  status: OrderStatus;   // ← incluye shipped/delivered
+  status: OrderStatus;
   shippingAddress: { street: string; city: string; zip: string; country: string };
+
+  currency?: string;
+  shippingCost?: number;
+  subtotal?: number;
+  tax?: number;
+  discount?: number;
+  paymentId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  userIdObj?: { _id: string; email?: string } | null;
+
+  trackingNumber?: string;
+  shippingInfo?: { trackingNumber?: string } | null;
 };
 
-/* 🔹 NUEVO: tipos para tracking de envíos (GET /shipping/tracking/:trackingNumber) */
-type TrackingEvent = {
-  timestamp: string;
-  status: string;
-  description?: string;
-  location?: string;
-};
+/* Tracking */
+type TrackingEvent = { timestamp: string; status: string; description?: string; location?: string };
 type TrackingResponse = {
   trackingNumber: string;
   status: string;
@@ -46,15 +56,14 @@ type TrackingResponse = {
   currentLocation?: string;
   history?: TrackingEvent[];
 };
-/* 🔹 NUEVO: helper local para llamar al endpoint de tracking */
 async function trackShipment(trackingNumber: string): Promise<TrackingResponse> {
-  return apiFetch<TrackingResponse>(`/shipping/tracking/${encodeURIComponent(trackingNumber)}`, {
-    method: "GET",
-  });
+  return apiFetch<TrackingResponse>(`/shipping/tracking/${encodeURIComponent(trackingNumber)}`, { method: "GET" });
 }
 
+/* API responses */
 type OrdersResponse =
   | { success: true; data: Order[]; message?: string }
+  | { success: true; data: { orders: Order[]; total?: number; limit?: number; offset?: number } }
   | { success: false; message: string };
 
 type UpdateStatusResponse =
@@ -70,9 +79,7 @@ function getJwtPayload(): any | null {
     if (parts.length !== 3) return null;
     const json = atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"));
     return JSON.parse(decodeURIComponent(escape(json)));
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 function isAdminFromToken(): boolean {
   const p = getJwtPayload();
@@ -83,8 +90,22 @@ function isAdminFromToken(): boolean {
   return false;
 }
 
-/* ========= Constantes ========== */
+/* ========= Constantes/formatos ========== */
 const STATUS_OPTIONS: OrderStatus[] = ["pending", "paid", "shipped", "delivered", "cancelled"];
+
+function money(n: number, currency?: string) {
+  const cur = currency || "USD";
+  try { return new Intl.NumberFormat("es-AR", { style: "currency", currency: cur }).format(n); }
+  catch { return `${cur} ${n}`; }
+}
+function itemName(it: OrderItem) {
+  return it.product?.name ?? it.productName ?? "(Producto)";
+}
+function userEmail(u: Order["userId"] | { _id: string; email?: string } | string | null | undefined) {
+  if (!u) return "—";
+  if (typeof u === "string") return u;
+  return (u as any)?.email || (u as any)?._id || "—";
+}
 
 /* ========= Página ========== */
 export default function AdminOrdersPage() {
@@ -93,43 +114,34 @@ export default function AdminOrdersPage() {
   const [err, setErr] = useState<string | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
 
-  // estados UI para actualizar estado
   const [editing, setEditing] = useState<Record<string, OrderStatus>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [globalMsg, setGlobalMsg] = useState<string | null>(null);
 
-  /* 🔹 NUEVO: estados UI por pedido para consultar tracking */
   const [trkInput, setTrkInput] = useState<Record<string, string>>({});
   const [trkLoading, setTrkLoading] = useState<Record<string, boolean>>({});
   const [trkErr, setTrkErr] = useState<Record<string, string | null>>({});
   const [trkData, setTrkData] = useState<Record<string, TrackingResponse | null>>({});
 
-  useEffect(() => {
-    setIsAdmin(isAdminFromToken());
-  }, []);
+  useEffect(() => { setIsAdmin(isAdminFromToken()); }, []);
 
   async function loadOrders() {
     if (!isAdmin) return;
-    setLoading(true);
-    setErr(null);
+    setLoading(true); setErr(null);
     try {
-      const r = await apiFetch<OrdersResponse>("/orders", { method: "GET" });
+      let r = await apiFetch<OrdersResponse>("/admin/orders?limit=50&offset=0", { method: "GET" });
       if (!("success" in r) || !r.success) {
-        throw new Error(("message" in r && r.message) || "No se pudieron obtener los pedidos");
+        r = await apiFetch<OrdersResponse>("/orders", { method: "GET" });
+        if (!("success" in r) || !r.success) throw new Error(("message" in r && r.message) || "No se pudieron obtener los pedidos");
       }
-      setOrders(r.data);
-      // precargar selects con el estado actual
-      const draft: Record<string, OrderStatus> = {};
-      r.data.forEach((o) => (draft[o._id] = o.status));
-      setEditing(draft);
+      const list: Order[] = Array.isArray((r as any).data) ? ((r as any).data as Order[]) : ((r as any).data?.orders ?? []);
+      list.sort((a, b) => (new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()));
+      setOrders(list);
 
-      // 🔹 precargar inputs de tracking si el pedido ya trae trackingNumber (directo o dentro de shippingInfo)
+      const draft: Record<string, OrderStatus> = {}; list.forEach((o) => (draft[o._id] = o.status)); setEditing(draft);
       const ti: Record<string, string> = {};
-      r.data.forEach((o) => {
-        const tn =
-          (o as any)?.trackingNumber ||
-          (o as any)?.shippingInfo?.trackingNumber ||
-          "";
+      list.forEach((o) => {
+        const tn = (o as any)?.trackingNumber || (o as any)?.shippingInfo?.trackingNumber || "";
         if (tn) ti[o._id] = String(tn);
       });
       setTrkInput((s) => ({ ...ti, ...s }));
@@ -139,163 +151,114 @@ export default function AdminOrdersPage() {
       if (msg.toLowerCase().includes("no autenticado") || msg.toLowerCase().includes("credenciales")) {
         window.location.href = "/auth?redirectTo=/admin/pedidos";
       }
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }
 
-  useEffect(() => {
-    if (isAdmin) loadOrders();
-  }, [isAdmin]);
+  useEffect(() => { if (isAdmin) loadOrders(); }, [isAdmin]);
 
   async function handleUpdateStatus(orderId: string) {
-    setGlobalMsg(null);
-    setSavingId(orderId);
+    setGlobalMsg(null); setSavingId(orderId);
     try {
       const desired = editing[orderId];
-      if (!STATUS_OPTIONS.includes(desired)) {
-        throw new Error("Estado inválido");
-      }
-      const r = await apiFetch<UpdateStatusResponse>(`/orders/${orderId}/status`, {
-        method: "PUT",
-        body: JSON.stringify({ status: desired }),
-      });
+      if (!STATUS_OPTIONS.includes(desired)) throw new Error("Estado inválido");
+      const put = (path: string) => apiFetch<UpdateStatusResponse>(path, { method: "PUT", body: JSON.stringify({ status: desired }) });
+      let r = await put(`/admin/orders/${orderId}/status`);
       if (!("success" in r) || !r.success) {
-        throw new Error(("message" in r && r.message) || "No se pudo actualizar el estado");
+        r = await put(`/orders/${orderId}/status`);
+        if (!("success" in r) || !r.success) throw new Error(("message" in r && r.message) || "No se pudo actualizar el estado");
       }
-
-      // Actualiza el pedido en la lista con el objeto devuelto por el backend
       setOrders((prev) => prev.map((o) => (o._id === orderId ? r.data : o)));
-      // Sincroniza el select con el valor confirmado por backend
       setEditing((s) => ({ ...s, [orderId]: r.data.status }));
-
       setGlobalMsg("Estado actualizado ✅");
     } catch (e: any) {
-      // 400: "Estado inválido"
-      // 403: "Se requiere rol de administrador"
-      // 404: "No se encontró un pedido con ID "
       const msg = e?.message || "No se pudo actualizar el estado";
       setGlobalMsg(msg);
       if (msg.toLowerCase().includes("no autenticado") || msg.toLowerCase().includes("credenciales")) {
         window.location.href = "/auth?redirectTo=/admin/pedidos";
       }
-    } finally {
-      setSavingId(null);
-    }
+    } finally { setSavingId(null); }
   }
 
-  /* 🔹 NUEVO: resolver trackingNumber desde pedido o input */
   function resolveTrackingNumber(o: Order, orderId: string): string {
-    return (
-      trkInput[orderId]?.trim() ||
-      (o as any)?.trackingNumber ||
-      (o as any)?.shippingInfo?.trackingNumber ||
-      ""
-    );
+    return trkInput[orderId]?.trim() || (o as any)?.trackingNumber || (o as any)?.shippingInfo?.trackingNumber || "";
   }
 
-  /* 🔹 NUEVO: handler para consultar GET /shipping/tracking/:trackingNumber */
   async function handleTrack(orderId: string) {
     const order = orders.find((x) => x._id === orderId);
     const tn = order ? resolveTrackingNumber(order, orderId) : "";
-    if (!tn) {
-      setTrkErr((s) => ({ ...s, [orderId]: "No hay trackingNumber para consultar" }));
-      return;
-    }
-    setTrkErr((s) => ({ ...s, [orderId]: null }));
-    setTrkLoading((s) => ({ ...s, [orderId]: true }));
-    try {
-      const r = await trackShipment(tn);
-      setTrkData((s) => ({ ...s, [orderId]: r }));
-    } catch (e: any) {
-      setTrkData((s) => ({ ...s, [orderId]: null }));
-      setTrkErr((s) => ({ ...s, [orderId]: e?.message || "No se pudo obtener el tracking" }));
-    } finally {
-      setTrkLoading((s) => ({ ...s, [orderId]: false }));
-    }
+    if (!tn) { setTrkErr((s) => ({ ...s, [orderId]: "No hay trackingNumber para consultar" })); return; }
+    setTrkErr((s) => ({ ...s, [orderId]: null })); setTrkLoading((s) => ({ ...s, [orderId]: true }));
+    try { const r = await trackShipment(tn); setTrkData((s) => ({ ...s, [orderId]: r })); }
+    catch (e: any) { setTrkData((s) => ({ ...s, [orderId]: null })); setTrkErr((s) => ({ ...s, [orderId]: e?.message || "No se pudo obtener el tracking" })); }
+    finally { setTrkLoading((s) => ({ ...s, [orderId]: false })); }
   }
 
   return (
-    <main style={{ maxWidth: 1024, margin: "24px auto", padding: "0 16px" }}>
-      <header style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Pedidos (admin)</h1>
-        <span style={{ marginLeft: "auto", opacity: 0.75, fontSize: 14 }}>
-          <Link href="/">Volver al inicio</Link>
-        </span>
+    <main className={s.page}>
+      <header className={s.header}>
+        <h1 className={s.title}>Pedidos (admin)</h1>
+        <Link href="/" className={s.back}>Volver al inicio</Link>
       </header>
 
       {!isAdmin && (
-        <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 16, background: "#fff" }}>
-          <p style={{ margin: 0 }}>Para ver y editar pedidos necesitás permisos de administrador.</p>
-        </div>
+        <div className={s.notice}><p className={s.m0}>Para ver y editar pedidos necesitás permisos de administrador.</p></div>
       )}
 
       {isAdmin && (
         <>
-          <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 8 }}>
-            <button
-              type="button"
-              onClick={loadOrders}
-              style={{
-                padding: "8px 12px",
-                borderRadius: 8,
-                border: "1px solid #ddd",
-                background: "white",
-                cursor: "pointer",
-                fontWeight: 600,
-              }}
-            >
-              Actualizar
-            </button>
-            <div style={{ opacity: 0.8 }}>
-              Total pedidos: <strong>{orders.length}</strong>
-            </div>
+          <div className={s.toolbar}>
+            <button type="button" onClick={loadOrders} className={s.btn}>Actualizar</button>
+            <div className={s.counter}>Total pedidos: <strong>{orders.length}</strong></div>
           </div>
 
-          {globalMsg && (
-            <p style={{ marginTop: 0, color: globalMsg.includes("✅") ? "green" : "crimson" }}>{globalMsg}</p>
-          )}
+          {globalMsg && <p className={globalMsg.includes("✅") ? s.ok : s.error}>{globalMsg}</p>}
+          {loading && <p className={s.muted}>Cargando pedidos…</p>}
+          {err && !loading && <p className={s.error}>{err}</p>}
 
-          {loading && <p>Cargando pedidos…</p>}
-          {err && !loading && <p style={{ color: "crimson" }}>{err}</p>}
           {!loading && !err && orders.length === 0 && (
-            <div style={{ border: "1px dashed #ccc", borderRadius: 12, padding: 16 }}>
-              <p style={{ margin: 0 }}>No hay pedidos.</p>
-            </div>
+            <div className={s.empty}><p className={s.m0}>No hay pedidos.</p></div>
           )}
 
           {!loading && !err && orders.length > 0 && (
-            <div style={{ display: "grid", gap: 12 }}>
+            <div className={s.list}>
               {orders.map((o) => (
-                <article
-                  key={o._id}
-                  style={{
-                    display: "grid",
-                    gap: 8,
-                    padding: 12,
-                    border: "1px solid #eee",
-                    borderRadius: 12,
-                    background: "#fff",
-                  }}
-                >
-                  <div style={{ display: "grid", gap: 4 }}>
+                <article key={o._id} className={s.card}>
+                  <div className={s.meta}>
+                    <div><strong>ID:</strong> {o._id}</div>
+                    <div><strong>Estado:</strong> {o.status} • <strong>Total:</strong> {o.total} • <strong>Ítems:</strong> {o.items?.length ?? 0}</div>
                     <div>
-                      <strong>ID:</strong> {o._id}
+                      <strong>Envío:</strong> {o.shippingAddress?.street ?? "—"}, {o.shippingAddress?.city ?? "—"} ({o.shippingAddress?.zip ?? "—"}), {o.shippingAddress?.country ?? "—"}
                     </div>
-                    <div>
-                      <strong>Estado:</strong> {o.status} &nbsp;•&nbsp; <strong>Total:</strong> {o.total}
-                      &nbsp;•&nbsp; <strong>Ítems:</strong> {o.items.length}
+
+                    <div className={s.metaLine}>
+                      {o.createdAt && (<><strong>Creado:</strong> {new Date(o.createdAt).toLocaleString("es-AR")} • </>)}
+                      {o.paymentId && (
+                        <>
+                          <strong>Pago:</strong> {o.paymentId} •{" "}
+                          <Link href={`/admin/pagos?focus=${encodeURIComponent(o.paymentId)}`} className={s.link}>Ver pago</Link> •{" "}
+                        </>
+                      )}
+                      <strong>Moneda:</strong> {o.currency || "USD"}
                     </div>
-                    <div>
-                      <strong>Envío:</strong> {o.shippingAddress.street}, {o.shippingAddress.city} ({o.shippingAddress.zip}), {o.shippingAddress.country}
+
+                    <div className={s.metaLine}>
+                      {typeof o.subtotal === "number" && (<><strong>Subtotal:</strong> {money(o.subtotal, o.currency)} • </>)}
+                      {typeof o.tax === "number" && (<><strong>Impuestos:</strong> {money(o.tax, o.currency)} • </>)}
+                      {typeof o.discount === "number" && o.discount > 0 && (<><strong>Descuento:</strong> {money(o.discount, o.currency)} • </>)}
+                      {typeof o.shippingCost === "number" && (<><strong>Envío:</strong> {money(o.shippingCost, o.currency)}</>)}
+                    </div>
+
+                    <div className={s.metaLine}>
+                      <strong>Total (formateado):</strong> {money(o.total, o.currency)} • <strong>Usuario:</strong>{" "}
+                      {userEmail((o as any)?.userId?.email ? (o as any).userId : o.userId)}
                     </div>
                   </div>
 
-                  {/* Resumen de ítems (product poblado) */}
-                  <div style={{ display: "grid", gap: 6 }}>
-                    {o.items.map((it, idx) => (
-                      <div key={idx} style={{ display: "flex", gap: 10, alignItems: "baseline", fontSize: 14 }}>
-                        <span style={{ fontWeight: 600 }}>{it.product?.name ?? "(Producto)"}</span>
+                  {/* Items */}
+                  <div className={s.itemsCompact}>
+                    {(o.items ?? []).map((it, idx) => (
+                      <div key={idx} className={s.itemRow}>
+                        <span className={s.itemName}>{itemName(it)}</span>
                         <span>• Cant: {it.quantity}</span>
                         <span>• Precio: {it.price}</span>
                         {it.size ? <span>• Talle: {it.size}</span> : null}
@@ -303,46 +266,36 @@ export default function AdminOrdersPage() {
                     ))}
                   </div>
 
-                  {/* Acciones */}
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                    <Link href={`/pedidos/${o._id}`} style={{ textDecoration: "underline" }}>
-                      Ver detalle
-                    </Link>
+                  {/* Totales por ítem */}
+                  <div className={s.itemsTotals}>
+                    {(o.items ?? []).map((it, idx) => (
+                      <div key={`m-${idx}`}>
+                        <strong>{itemName(it)}</strong>: {money(it.price * it.quantity, o.currency)} ({money(it.price, o.currency)} c/u × {it.quantity})
+                      </div>
+                    ))}
+                  </div>
 
-                    {/* --- Cambiar estado (solo admin) --- */}
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <label style={{ fontSize: 13, opacity: 0.85 }}>Estado:</label>
+                  {/* Acciones */}
+                  <div className={s.actions}>
+                    <Link href={`/pedidos/${o._id}`} className={s.link}>Ver detalle</Link>
+
+                    <div className={s.statusWrap}>
+                      <label className={s.lbl}>Estado:</label>
                       <select
                         value={editing[o._id] ?? o.status}
-                        onChange={(e) =>
-                          setEditing((s) => ({
-                            ...s,
-                            [o._id]: e.target.value as OrderStatus,
-                          }))
-                        }
+                        onChange={(e) => setEditing((s) => ({ ...s, [o._id]: e.target.value as OrderStatus }))}
                         disabled={savingId === o._id}
-                        style={{ padding: "6px 8px", borderRadius: 8, border: "1px solid #ddd" }}
+                        className={s.select}
                         aria-label={`Cambiar estado del pedido ${o._id}`}
                       >
-                        {STATUS_OPTIONS.map((st) => (
-                          <option key={st} value={st}>
-                            {st}
-                          </option>
-                        ))}
+                        {STATUS_OPTIONS.map((st) => <option key={st} value={st}>{st}</option>)}
                       </select>
 
                       <button
                         type="button"
                         onClick={() => handleUpdateStatus(o._id)}
                         disabled={savingId === o._id}
-                        style={{
-                          padding: "8px 12px",
-                          borderRadius: 8,
-                          border: "1px solid #ddd",
-                          background: savingId === o._id ? "#f3f3f3" : "white",
-                          cursor: savingId === o._id ? "default" : "pointer",
-                          fontWeight: 600,
-                        }}
+                        className={s.btn}
                         title="Actualizar estado"
                       >
                         {savingId === o._id ? "Guardando…" : "Actualizar estado"}
@@ -350,85 +303,45 @@ export default function AdminOrdersPage() {
                     </div>
                   </div>
 
-                  {/* 🔹 NUEVO: Bloque de tracking del envío */}
-                  <div
-                    style={{
-                      marginTop: 8,
-                      paddingTop: 8,
-                      borderTop: "1px dashed #eee",
-                      display: "grid",
-                      gap: 8,
-                    }}
-                  >
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                      <label style={{ fontSize: 13, opacity: 0.85 }}>Tracking:</label>
+                  {/* Tracking */}
+                  <div className={s.tracking}>
+                    <div className={s.trkControls}>
+                      <label className={s.lbl}>Tracking:</label>
                       <input
                         value={trkInput[o._id] ?? ((o as any)?.trackingNumber || (o as any)?.shippingInfo?.trackingNumber || "")}
-                        onChange={(e) =>
-                          setTrkInput((s) => ({
-                            ...s,
-                            [o._id]: e.target.value,
-                          }))
-                        }
+                        onChange={(e) => setTrkInput((s) => ({ ...s, [o._id]: e.target.value }))}
                         placeholder="TRK123456789"
-                        style={{ padding: "6px 8px", borderRadius: 8, border: "1px solid #ddd", minWidth: 220 }}
+                        className={s.input}
                       />
                       <button
                         type="button"
                         onClick={() => handleTrack(o._id)}
                         disabled={!!trkLoading[o._id]}
-                        style={{
-                          padding: "8px 12px",
-                          borderRadius: 8,
-                          border: "1px solid #ddd",
-                          background: trkLoading[o._id] ? "#f3f3f3" : "white",
-                          cursor: trkLoading[o._id] ? "default" : "pointer",
-                          fontWeight: 600,
-                        }}
-                        title="Consultar tracking (GET /shipping/tracking/:trackingNumber)"
+                        className={s.btn}
+                        title="Consultar tracking"
                       >
                         {trkLoading[o._id] ? "Consultando…" : "Consultar tracking"}
                       </button>
 
-                      {trkErr[o._id] && (
-                        <span style={{ color: "crimson" }}>{trkErr[o._id]}</span>
-                      )}
+                      {trkErr[o._id] && <span className={s.error}>{trkErr[o._id]}</span>}
                     </div>
 
-                    {/* Resultado del tracking */}
                     {trkData[o._id] && (
-                      <div
-                        style={{
-                          border: "1px solid #eef2ff",
-                          background: "#f8faff",
-                          borderRadius: 10,
-                          padding: 10,
-                          display: "grid",
-                          gap: 6,
-                        }}
-                      >
-                        <div style={{ fontWeight: 700 }}>
-                          {trkData[o._id]?.trackingNumber}
-                        </div>
+                      <div className={s.trkPanel}>
+                        <div className={s.trkHead}>{trkData[o._id]?.trackingNumber}</div>
                         <div>
                           <strong>Estado:</strong> {trkData[o._id]?.status}
-                          {trkData[o._id]?.currentLocation && (
-                            <> &nbsp;•&nbsp; <strong>Ubicación:</strong> {trkData[o._id]?.currentLocation}</>
-                          )}
-                          {trkData[o._id]?.estimatedDelivery && (
-                            <> &nbsp;•&nbsp; <strong>ETA:</strong> {new Date(trkData[o._id]!.estimatedDelivery!).toLocaleString("es-AR")}</>
-                          )}
+                          {trkData[o._id]?.currentLocation && (<> • <strong>Ubicación:</strong> {trkData[o._id]?.currentLocation}</>)}
+                          {trkData[o._id]?.estimatedDelivery && (<> • <strong>ETA:</strong> {new Date(trkData[o._id]!.estimatedDelivery!).toLocaleString("es-AR")}</>)}
                         </div>
 
                         {Array.isArray(trkData[o._id]?.history) && trkData[o._id]!.history!.length > 0 && (
                           <div>
-                            <div style={{ fontWeight: 600, marginBottom: 4 }}>Historial</div>
-                            <ul style={{ margin: 0, paddingLeft: 18 }}>
+                            <div className={s.trkHistTitle}>Historial</div>
+                            <ul className={s.trkList}>
                               {trkData[o._id]!.history!.map((h, i) => (
-                                <li key={i} style={{ marginBottom: 2 }}>
-                                  <span style={{ opacity: 0.8 }}>
-                                    {new Date(h.timestamp).toLocaleString("es-AR")}
-                                  </span>
+                                <li key={i} className={s.trkItem}>
+                                  <span className={s.trkTs}>{new Date(h.timestamp).toLocaleString("es-AR")}</span>
                                   {" — "}
                                   <strong>{h.status}</strong>
                                   {h.description ? `: ${h.description}` : ""}
@@ -441,7 +354,6 @@ export default function AdminOrdersPage() {
                       </div>
                     )}
                   </div>
-                  {/* 🔹 FIN tracking */}
                 </article>
               ))}
             </div>

@@ -1,5 +1,6 @@
 // src/lib/resolveImageUrls.ts
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3000";
+// ✅ cambiar default al 3001 para alinear con tu API
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3001";
 
 export type MediaDoc = {
   _id: string;
@@ -8,14 +9,26 @@ export type MediaDoc = {
   updatedAt?: string;
 };
 
+/* ✅ NUEVO: heurística para aceptar solo URLs que “parecen” imagen */
+function isLikelyImageUrl(u: string) {
+  if (!u) return false;
+  if (/^https?:\/\//i.test(u)) {
+    if (/\.(png|jpe?g|webp|gif|avif)(\?.*)?$/i.test(u)) return true;
+    if (/[?&](width|height|format|v)=/i.test(u) && !/\.html?($|\?)/i.test(u)) return true;
+    return !/\.html?($|\?)/i.test(u) && !/\.php($|\?)/i.test(u);
+  }
+  // relativo: lo resolvemos y luego validamos afuera
+  return true;
+}
+
 export async function resolveImageUrls(images: string[]): Promise<string[]> {
   const safe = images.filter(Boolean);
   const out: string[] = [];
 
   for (const raw of safe) {
-    // Si ya es URL absoluta, úsala tal cual
+    // Si ya es URL absoluta y parece imagen, úsala
     if (/^https?:\/\//i.test(raw)) {
-      out.push(raw);
+      if (isLikelyImageUrl(raw)) out.push(raw);
       continue;
     }
 
@@ -27,15 +40,17 @@ export async function resolveImageUrls(images: string[]): Promise<string[]> {
         if (res.ok && json?.success && json?.data?.url) {
           const ver = json?.data?.updatedAt ?? Date.now();
           const abs = `${API_BASE}/${json.data.url}?v=${encodeURIComponent(ver)}`.replace(/([^:]\/)\/+/g, "$1");
-          out.push(abs);
+          if (isLikelyImageUrl(abs)) out.push(abs);
           continue;
         }
       } catch { /* ignore y caemos al siguiente caso */ }
     }
 
     // fallback: por si viniera ya como ruta relativa
-    out.push(`${API_BASE}/${raw}`.replace(/([^:]\/)\/+/g, "$1"));
+    const rel = `${API_BASE}/${raw}`.replace(/([^:]\/)\/+/g, "$1");
+    if (isLikelyImageUrl(rel)) out.push(rel);
   }
 
   return out;
 }
+

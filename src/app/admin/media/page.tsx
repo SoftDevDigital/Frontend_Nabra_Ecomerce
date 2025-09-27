@@ -20,6 +20,21 @@ type UploadResponse = {
   message?: string;
 };
 
+/* ⬇️⬇️⬇️ AGREGADO: helpers para API base y Authorization */
+function getApiBase() {
+  // por defecto apuntamos a tu backend en 3001 (coincide con tu cURL)
+  return process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3001";
+}
+function getAuthHeader() {
+  try {
+    const t = typeof window !== "undefined" ? localStorage.getItem("nabra_token") : null;
+    return t ? { Authorization: `Bearer ${t}` } : {};
+  } catch {
+    return {};
+  }
+}
+/* ⬆️⬆️⬆️ FIN helpers */
+
 /* ⬇️⬇️⬇️ AGREGADO: helpers para detectar si el token es admin (UI gating) */
 function getJwtPayload(): any | null {
   try {
@@ -131,13 +146,13 @@ export default function MediaUploadPage() {
 }
 
 
-  // 🔹 AGREGADO: handler para GET /media/:id (endpoint público)
+  // 🔹 AGREGADO: handler para GET /media/:id (ahora con Authorization si hay token)
   async function handleLookup(e: React.FormEvent) {
     e.preventDefault();
     setLookupMsg(null);
     setLookupResult(null);
 
-    const base = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3000";
+    const base = getApiBase();
     const id = lookupId.trim();
     if (!id) {
       setLookupMsg("Ingresá un ID de media.");
@@ -146,7 +161,13 @@ export default function MediaUploadPage() {
 
     setLookupLoading(true);
     try {
-      const res = await fetch(`${base}/media/${id}`, { cache: "no-store" });
+      const res = await fetch(`${base}/media/${id}`, {
+        cache: "no-store",
+        headers: {
+          accept: "application/json",
+          ...getAuthHeader(), // ⬅️ si hay token, lo manda
+        },
+      });
       const json = await res.json();
       if (!res.ok || !json?.success) {
         throw new Error(json?.message || "Archivo no encontrado");
@@ -248,6 +269,9 @@ export default function MediaUploadPage() {
     }
   }
 
+  const apiBase = getApiBase();
+  const joinUrl = (u: string) => `${apiBase}/${u}`.replace(/([^:]\/)\/+/g, "$1");
+
   return (
     <main style={{ maxWidth: 720, margin: "24px auto", padding: "0 16px" }}>
       <header style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
@@ -343,13 +367,13 @@ export default function MediaUploadPage() {
             {/* Vista previa si es imagen */}
             <div style={{ marginTop: 8 }}>
               <img
-                src={`${process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3000"}/${result.url}`.replace(/([^:]\/)\/+/g, "$1")}
+                src={joinUrl(result.url)}
                 alt={result.fileName}
                 style={{ maxWidth: 320, borderRadius: 8, border: "1px solid #eee" }}
               />
             </div>
 
-            {/* Link a la página pública GET /media/:id */}
+            {/* Link a la página pública GET /media/:id (tu front) */}
             <a
               href={`/media/${result._id}`}
               style={{ marginTop: 4, textDecoration: "underline" }}
@@ -357,6 +381,27 @@ export default function MediaUploadPage() {
             >
               Ver público (/media/{result._id})
             </a>
+
+            {/* ⬇️⬇️⬇️ AGREGADOS: enlaces directos al backend */}
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 4 }}>
+              <a
+                href={`${getApiBase()}/media/${result._id}`}
+                target="_blank" rel="noreferrer"
+                style={{ textDecoration: "underline" }}
+                title="Ver JSON en backend"
+              >
+                Ver JSON en backend
+              </a>
+              <a
+                href={joinUrl(result.url)}
+                target="_blank" rel="noreferrer"
+                style={{ textDecoration: "underline" }}
+                title="Abrir archivo (url)"
+              >
+                Abrir archivo (url)
+              </a>
+            </div>
+            {/* ⬆️⬆️⬆️ FIN agregados */}
 
             {/* 🔹 AGREGADO: botones de acciones (SOLO ADMIN) */}
             {isAdmin && (
@@ -489,10 +534,10 @@ export default function MediaUploadPage() {
             </div>
 
             {/* Vista previa si es imagen */}
-            {/^image\//.test(lookupResult.mimeType) && (
+            {/^\image\//.test(lookupResult.mimeType) && (
               <div style={{ marginTop: 8 }}>
                 <img
-                  src={`${(process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3000")}/${lookupResult.url}`.replace(/([^:]\/)\/+/g, "$1")}
+                  src={joinUrl(lookupResult.url)}
                   alt={lookupResult.fileName}
                   style={{ maxWidth: 320, borderRadius: 8, border: "1px solid #eee" }}
                 />
@@ -507,6 +552,27 @@ export default function MediaUploadPage() {
             >
               Ver público (/media/{lookupResult._id})
             </a>
+
+            {/* ⬇️⬇️⬇️ AGREGADOS: enlaces directos al backend */}
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 4 }}>
+              <a
+                href={`${getApiBase()}/media/${lookupResult._id}`}
+                target="_blank" rel="noreferrer"
+                style={{ textDecoration: "underline" }}
+                title="Ver JSON en backend"
+              >
+                Ver JSON en backend
+              </a>
+              <a
+                href={joinUrl(lookupResult.url)}
+                target="_blank" rel="noreferrer"
+                style={{ textDecoration: "underline" }}
+                title="Abrir archivo (url)"
+              >
+                Abrir archivo (url)
+              </a>
+            </div>
+            {/* ⬆️⬆️⬆️ FIN agregados */}
 
             {/* 🔹 AGREGADO: botones de acciones (SOLO ADMIN) */}
             {isAdmin && (

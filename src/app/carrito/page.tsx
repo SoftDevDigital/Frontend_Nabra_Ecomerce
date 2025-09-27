@@ -3,7 +3,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { calculateShipping, getShippingServices } from "@/lib/shippingApi"; 
+import { calculateShipping, getShippingServices } from "@/lib/shippingApi";
+import { useRouter } from "next/navigation";
+import s from "./Cart.module.css";
+
 /* ===== Tipos base ===== */
 type CartProduct = {
   _id?: string;
@@ -74,6 +77,35 @@ type DeleteCartItemResponse = {
   cartTotal: number;
 };
 
+// 🆕 limpiar carrito
+type ClearCartResponse = {
+  success: boolean;
+  data: {
+    _id: string;
+    items: any[];
+    userId: string;
+    createdAt: string;
+    updatedAt: string;
+    __v?: number;
+  };
+  message?: string;
+};
+
+type RemoveCartItemResponse = {
+  success: boolean;
+  data: {
+    _id: string;
+    items: any[];
+    userId: string;
+    createdAt: string;
+    updatedAt: string;
+    __v?: number;
+  };
+  message?: string;
+};
+
+
+
 type SummaryItem = {
   _id: string;
   productId: string;
@@ -84,15 +116,21 @@ type SummaryItem = {
   subtotal: number;
 };
 
-type CartSummaryResponse = {
-  items: SummaryItem[];
-  subtotal: number;
-  discounts: { type: string; amount: number; description?: string; promotionId?: string }[];
-  totalDiscount: number;
-  shipping: number;
-  finalTotal: number;
+// === /cart/summary-with-discounts (envuelve igual que apply-coupon) ===
+type CartSummaryWithDiscountsData = {
+  cartSummary: ApplyCouponCartSummary; // items, subtotal, estimatedTax, estimatedTotal, currency...
+  discounts:   ApplyCouponDiscounts;   // success, totalDiscount, finalTotal, savings...
+  finalTotal:  number;                 // total final (con tax/shipping según back)
 };
 
+type CartSummaryWithDiscountsWrapped = {
+  success: boolean;
+  data: CartSummaryWithDiscountsData;
+  message?: string;
+};
+
+// Para aceptar wrapped o plano (por si el back alguna vez lo envía sin wrapper)
+type CartSummaryWithDiscountsResponse = CartSummaryWithDiscountsWrapped | CartSummaryWithDiscountsData;
 
 /* ===== Pedido ===== */
 type OrderItemOut = { product: string; quantity: number; size?: string; price: number };
@@ -114,8 +152,7 @@ type CreateOrderResponse =
   | { success: true; data: OrderOut; message?: string }
   | { success: false; message: string };
 
-
-  // 🔹 NUEVO: tipos para Promos
+// 🔹 NUEVO: tipos para Promos
 type Promotion = {
   _id: string;
   name: string;
@@ -154,7 +191,7 @@ type ApplyDiscountsResponse = {
     promotionName: string;
     type: string;
     discountAmount: number;
-    appliedToItems: string[]; // ids de producto o cartItem según backend
+    appliedToItems: string[];
     description?: string;
   }[];
   totalDiscount: number;
@@ -169,6 +206,173 @@ type ValidateCouponResponse =
       message?: string;
     }
   | { valid: false; message?: string; error?: string };
+
+/* ====== NUEVO: Tipos para POST /cart/apply-coupon ====== */
+type ApplyCouponCartItem = {
+  _id: string;
+  product: { _id: string; name: string; price: number; images?: string[]; [k: string]: any };
+  quantity: number;
+  size?: string;
+  itemTotal: number; // price * quantity (unitario por cantidad)
+};
+
+type ApplyCouponCartSummary = {
+  items: ApplyCouponCartItem[];
+  totalItems: number;
+  totalQuantity: number;
+  subtotal: number;
+  estimatedTax?: number;
+  estimatedTotal: number; // subtotal - desc + tax + shipping (según back)
+  currency?: string;
+  originalTotal?: number;
+};
+
+type ApplyCouponDiscounts = {
+  success: boolean;
+  appliedPromotions: any[];
+  totalDiscount: number;
+  originalTotal: number;
+  finalTotal: number;
+  savings: number;
+  errors?: string[];
+};
+
+type ApplyCouponResponse = {
+  success: boolean;
+  data: {
+    cartSummary: ApplyCouponCartSummary;
+    discounts: ApplyCouponDiscounts;
+    finalTotal: number;
+  };
+  message?: string;
+};
+
+
+// === Shipping address en carrito ===
+type SaveShippingAddressBody = {
+  fullName: string;
+  phone: string;
+  addressLine: string;
+  city: string;
+  postalCode: string;
+  province?: string;
+  notes?: string;
+};
+
+type SaveShippingAddressResponse = {
+  success: boolean;
+  data?: {
+    success: boolean;
+    shippingAddress: {
+      country?: string;        // ej. "MX"
+      postal_code?: string;    // ej. "1405"
+      city?: string;           // ej. "CABA"
+      contact?: { name?: string; phone?: string; email?: string };
+      // ...otros campos que tu back quiera devolver
+    };
+    message?: string;
+  };
+  message?: string;
+};
+
+
+// === /cart/summary (resumen plano) ===
+type CartSummaryPlainItem = {
+  _id?: string;
+  productId?: string;
+  productName?: string;
+  quantity: number;
+  price?: number;
+  itemTotal?: number;
+};
+
+type CartSummaryPlain = {
+  items: CartSummaryPlainItem[];
+  totalItems: number;
+  totalQuantity: number;
+  subtotal: number;
+  estimatedTax: number;
+  estimatedTotal: number;
+  currency?: string; // ej. "USD"
+};
+
+type CartSummaryPlainWrapped = {
+  success: boolean;
+  data: CartSummaryPlain;
+  message?: string;
+};
+
+
+// ====== NUEVO: Tipos para GET /cart/total ======
+type CartTotalItem = {
+  _id: string;
+  product: { _id: string; name: string; price: number; images?: string[]; [k: string]: any };
+  quantity: number;
+  size?: string;
+  itemTotal: number;
+};
+
+type CartTotalData = {
+  items: CartTotalItem[];
+  totalItems: number;
+  totalQuantity: number;
+  subtotal: number;
+  estimatedTax?: number;
+  estimatedTotal: number;
+  currency?: string; // ej. "USD"
+};
+
+type CartTotalWrapped = { success: boolean; data: CartTotalData; message?: string };
+type CartTotalResponse = CartTotalWrapped | CartTotalData;
+
+
+type CartValidateData = {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+};
+
+type CartValidateWrapped = { success: boolean; data: CartValidateData; message?: string };
+type CartValidateResponse = CartValidateWrapped | CartValidateData;
+
+
+// ====== NUEVO: GET /cart/with-shipping ======
+type ShippingRate = {
+  id: string;
+  carrier: string;        // ej: "fedex"
+  service: string;        // ej: "ground" | "express"
+  price: number;
+  currency?: string;      // ej: "MXN"
+  days?: string;          // ej: "3 a 5 días"
+  serviceId?: string;
+  metadata?: any;
+};
+
+type WithShippingAddress = {
+  country?: string;
+  postal_code?: string;
+  city?: string;
+  contact?: { name?: string; phone?: string; email?: string };
+};
+
+type WithShippingData = {
+  cart: {
+    _id: string;
+    items: { _id: string; product: { _id: string; name: string; price?: number; images?: string[]; stock?: number; isPreorder?: boolean }; quantity: number; size?: string }[];
+    userId: string;
+    createdAt?: string;
+    updatedAt?: string;
+    shippingAddress?: WithShippingAddress;
+  };
+  summary: CartTotalData; // mismos campos que ya definiste: items, subtotal, estimatedTax, estimatedTotal, currency...
+  shipping: {
+    rates: ShippingRate[];
+    address?: WithShippingAddress;
+  };
+};
+
+type WithShippingWrapped = { success: boolean; data: WithShippingData; message?: string };
+type WithShippingResponse = WithShippingWrapped | WithShippingData;
 
 
 /* ===== Helper fetch (con Bearer) ===== */
@@ -208,7 +412,7 @@ export default function CartPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [items, setItems] = useState<CartItem[]>([]);
-
+ const router = useRouter();
   // Totales (compatibles con el contrato)
   const [cartId, setCartId] = useState<string | null>(null);
   const [cartTotal, setCartTotal] = useState<number | null>(null);
@@ -233,6 +437,10 @@ export default function CartPage() {
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [removeMsg, setRemoveMsg] = useState<string | null>(null);
 
+  // 🆕 Vaciar carrito
+const [clearing, setClearing] = useState(false);
+const [clearMsg, setClearMsg] = useState<string | null>(null);
+
   // Envío / Pedido
   const [shipStreet, setShipStreet] = useState("");
   const [shipCity, setShipCity] = useState("");
@@ -243,201 +451,392 @@ export default function CartPage() {
   const [orderCreated, setOrderCreated] = useState<OrderOut | null>(null);
 
   // Cupones / summary con descuentos
-const [couponCode, setCouponCode] = useState<string>("");
-const [summaryLoading, setSummaryLoading] = useState<boolean>(false);
-const [summaryErr,   setSummaryErr]   = useState<string | null>(null);
-const [summary,      setSummary]      = useState<CartSummaryResponse | null>(null);
+  const [couponCode, setCouponCode] = useState<string>("");
+  const [summaryLoading, setSummaryLoading] = useState<boolean>(false);
+  const [summaryErr,   setSummaryErr]   = useState<string | null>(null);
+  const [summary,      setSummary]      = useState<CartSummaryResponse | null>(null);
+const [summaryV2, setSummaryV2] = useState<CartSummaryWithDiscountsData | null>(null);
+  // 🔹 NUEVO: estado de resultado crudo de /cart/apply-coupon
+  const [couponResult, setCouponResult] = useState<ApplyCouponResponse | null>(null);
 
-// 🔹 NUEVO: estado para promos activas y tipos
-const [activePromos, setActivePromos] = useState<Promotion[]>([]);
-const [promoTypes, setPromoTypes] = useState<PromotionType[]>([]);
-const [promosLoading, setPromosLoading] = useState<boolean>(false);
-const [promosErr, setPromosErr] = useState<string | null>(null);
+  // 🔹 NUEVO: estado para promos activas y tipos
+  const [activePromos, setActivePromos] = useState<Promotion[]>([]);
+  const [promoTypes, setPromoTypes] = useState<PromotionType[]>([]);
+  const [promosLoading, setPromosLoading] = useState<boolean>(false);
+  const [promosErr, setPromosErr] = useState<string | null>(null);
 
-// 🔹 NUEVO: estado para resultado de /promotions/apply-discounts
-const [promoCalc, setPromoCalc] = useState<ApplyDiscountsResponse | null>(null);
-const [promoCalcLoading, setPromoCalcLoading] = useState<boolean>(false);
-const [promoCalcErr, setPromoCalcErr] = useState<string | null>(null);
+  // 🔹 NUEVO: estado para resultado de /promotions/apply-discounts
+  const [promoCalc, setPromoCalc] = useState<ApplyDiscountsResponse | null>(null);
+  const [promoCalcLoading, setPromoCalcLoading] = useState<boolean>(false);
+  const [promoCalcErr, setPromoCalcErr] = useState<string | null>(null);
 
-// 🔹 NUEVO: estado para validar cupón
-const [couponValidation, setCouponValidation] = useState<ValidateCouponResponse | null>(null);
-const [couponValidating, setCouponValidating] = useState<boolean>(false);
+  // 🔹 NUEVO: estado para validar cupón
+  const [couponValidation, setCouponValidation] = useState<ValidateCouponResponse | null>(null);
+  const [couponValidating, setCouponValidating] = useState<boolean>(false);
 
-// 🔹 NUEVO (envíos): estado para cálculo de envío
-const [addressId, setAddressId] = useState<string>(""); // e.g. "addr_001"
-const [shipCalcLoading, setShipCalcLoading] = useState(false);
-const [shipOptions, setShipOptions] = useState<import("@/lib/shippingApi").ShippingOption[] | null>(null);
-const [shipCalcErr, setShipCalcErr] = useState<string | null>(null);
+  // 🔹 NUEVO (envíos): estado para cálculo de envío
+  const [addressId, setAddressId] = useState<string>(""); // e.g. "addr_001"
+  const [shipCalcLoading, setShipCalcLoading] = useState(false);
+  const [shipOptions, setShipOptions] = useState<import("@/lib/shippingApi").ShippingOption[] | null>(null);
+  const [shipCalcErr, setShipCalcErr] = useState<string | null>(null);
 
-
-function buildApplyDiscountsPayload(items: CartItem[]): { cartItems: ApplyDiscountsRequestItem[]; totalAmount: number } {
-  const cartItems: ApplyDiscountsRequestItem[] = items.map((it) => {
-    const unitPrice =
-      typeof it.price === "number"
-        ? it.price
-        : // si no viene price unitario, intento derivarlo desde subtotal/cantidad
-          (typeof it.subtotal === "number" && it.quantity > 0 ? it.subtotal / it.quantity : 0);
-
-    return {
-      productId: String(it.product?._id || ""),
-      cartItemId: String(it._id),
-      productName: it.product?.name || undefined,
-      // si tu backend te puede mandar category anidada en product, la pasamos
-      category: (it.product as any)?.category || undefined,
-      quantity: Number(it.quantity) || 1,
-      price: Number(unitPrice) || 0,
-      size: it.size ?? undefined,
-    };
-  });
-
-  // OriginalAmount: suma precio*cantidad (evita depender de subtotal)
-  const totalAmount = cartItems.reduce((acc, ci) => acc + ci.price * ci.quantity, 0);
-
-  return { cartItems, totalAmount };
-}
+  // Form "Guardar dirección de envío en el carrito"
+const [addrFullName, setAddrFullName] = useState("Jane Doe");
+const [addrPhone, setAddrPhone] = useState("+54 11 5555-5555");
+const [addrLine, setAddrLine] = useState("Av. Siempre Viva 742");
+const [addrCity, setAddrCity] = useState("CABA");
+const [addrPostal, setAddrPostal] = useState("1405");
+const [addrProvince, setAddrProvince] = useState("Buenos Aires");
+const [addrNotes, setAddrNotes] = useState("Portería 2");
+const [savingAddr, setSavingAddr] = useState(false);
+const [saveAddrMsg, setSaveAddrMsg] = useState<string | null>(null);
 
 
-// 🔹 NUEVO (envíos): construir items con peso/dimensiones
-function buildShippingItems(items: CartItem[]): import("@/lib/shippingApi").ShipItem[] {
-  return items.map((it) => {
-    // Intentar tomar del producto si existe; si no, defaults sensatos
-    const p: any = it.product || {};
-    const weight = typeof p.weight === "number" ? p.weight : 0.5; // kg default
-    const dims = p.dimensions || p.package || {};
-    const length = Number(dims.length ?? 20);
-    const width  = Number(dims.width  ?? 15);
-    const height = Number(dims.height ?? 10);
-    return {
-      productId: String(p._id || ""),
-      quantity: Number(it.quantity) || 1,
-      weight,
-      dimensions: { length, width, height },
-    };
-  });
-}
+// Resumen plano /cart/summary
+const [plainSummary, setPlainSummary] = useState<CartSummaryPlain | null>(null);
+const [plainSummaryLoading, setPlainSummaryLoading] = useState(false);
+const [plainSummaryErr, setPlainSummaryErr] = useState<string | null>(null);
 
 
-// 🔹 NUEVO: fetch promos activas y tipos
-async function fetchActivePromotions(params?: { type?: string; category?: string }) {
-  const qs = new URLSearchParams();
-  if (params?.type) qs.set("type", params.type);
-  if (params?.category) qs.set("category", params.category);
-  const suffix = qs.toString() ? `?${qs.toString()}` : "";
-  return apiFetch<{ promotions: Promotion[] }>(`/promotions/active${suffix}`, { method: "GET" });
-}
+// /cart/total
+const [cartTotalSummary, setCartTotalSummary] = useState<CartTotalData | null>(null);
+const [cartTotalLoading, setCartTotalLoading] = useState(false);
+const [cartTotalErr, setCartTotalErr] = useState<string | null>(null);
 
-async function fetchPromotionTypes() {
-  return apiFetch<{ types: PromotionType[] }>(`/promotions/types`, { method: "GET" });
-}
 
-async function handleCalculateShipping(e: React.FormEvent) {
-  e.preventDefault();
-  setShipOptions(null);
-  setShipCalcErr(null);
+// /cart/validate
+const [cartValidate, setCartValidate] = useState<CartValidateData | null>(null);
+const [cartValidateLoading, setCartValidateLoading] = useState(false);
+const [cartValidateErr, setCartValidateErr] = useState<string | null>(null);
 
-  if (!addressId.trim()) {
-    setShipCalcErr("Indicá un addressId (ej: addr_001)");
-    return;
-  }
-  if (items.length === 0) {
-    setShipCalcErr("El carrito está vacío");
-    return;
-  }
 
-  setShipCalcLoading(true);
-  try {
-    const cartItems = buildShippingItems(items);
-    const res = await calculateShipping({ addressId: addressId.trim(), cartItems });
-    setShipOptions(res.options || []);
-    // (opcional) si calificás a envío gratis, podrías “inyectar” una opción costo 0
-    // if (res.qualifiesForFreeShipping) setShipOptions([{ service:"free", name:"Envío gratis", cost:0, estimatedDays: res?.options?.[0]?.estimatedDays ?? 3 }]);
-  } catch (e: any) {
-    setShipOptions(null);
-    setShipCalcErr(e?.message || "No se pudo calcular el envío");
-  } finally {
-    setShipCalcLoading(false);
-  }
-}
-// 🔹 NUEVO: aplicar descuentos (POST /promotions/apply-discounts)
-async function applyDiscounts(payload: { couponCode?: string; cartItems: ApplyDiscountsRequestItem[]; totalAmount: number }) {
-  return apiFetch<ApplyDiscountsResponse>(`/promotions/apply-discounts`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
+// /cart/with-shipping
+const [withShip, setWithShip] = useState<WithShippingData | null>(null);
+const [withShipLoading, setWithShipLoading] = useState(false);
+const [withShipErr, setWithShipErr] = useState<string | null>(null);
+const [selectedRate, setSelectedRate] = useState<ShippingRate | null>(null);
 
-// 🔹 NUEVO: validar cupón (POST /promotions/validate-coupon)
-async function validateCoupon(couponCode: string, userId?: string) {
-  return apiFetch<ValidateCouponResponse>(`/promotions/validate-coupon`, {
-    method: "POST",
-    body: JSON.stringify({ couponCode, userId }),
-  });
-}
-useEffect(() => {
-  setPromoCalc(null);
-  setCouponValidation(null);
-}, [couponCode]);
+  function buildApplyDiscountsPayload(items: CartItem[]): { cartItems: ApplyDiscountsRequestItem[]; totalAmount: number } {
+    const cartItems: ApplyDiscountsRequestItem[] = items.map((it) => {
+      const unitPrice =
+        typeof it.price === "number"
+          ? it.price
+          : (typeof it.subtotal === "number" && it.quantity > 0 ? it.subtotal / it.quantity : 0);
 
-// 🔹 NUEVO: cargar promos activas + tipos al montar
-useEffect(() => {
-  let abort = false;
-  (async () => {
-    setPromosLoading(true);
-    setPromosErr(null);
-    try {
-      const [actives, types] = await Promise.all([fetchActivePromotions(), fetchPromotionTypes()]);
-      if (!abort) {
-        setActivePromos(Array.isArray(actives?.promotions) ? actives.promotions : []);
-        setPromoTypes(Array.isArray(types?.types) ? types.types : []);
-      }
-    } catch (e: any) {
-      if (!abort) setPromosErr(e?.message || "No se pudieron cargar las promociones");
-    } finally {
-      if (!abort) setPromosLoading(false);
-    }
-  })();
-  return () => {
-    abort = true;
-  };
-}, []);
-// 🔹 NUEVO: validar cupón sin aplicarlo
-async function handleValidateCoupon(e: React.FormEvent) {
-  e.preventDefault();
-  setCouponValidation(null);
-  if (!couponCode.trim()) return;
-  setCouponValidating(true);
-  try {
-    const res = await validateCoupon(couponCode.trim());
-    setCouponValidation(res);
-  } catch (e: any) {
-    setCouponValidation({ valid: false, message: e?.message || "No se pudo validar el cupón" });
-  } finally {
-    setCouponValidating(false);
-  }
-}
-
-// 🔹 NUEVO: calcular descuentos con /promotions/apply-discounts (sobre el carrito actual)
-async function handleApplyPromotions(e: React.FormEvent) {
-  e.preventDefault();
-  setPromoCalc(null);
-  setPromoCalcErr(null);
-  setPromoCalcLoading(true);
-  try {
-    const { cartItems, totalAmount } = buildApplyDiscountsPayload(items);
-    const res = await applyDiscounts({
-      couponCode: couponCode.trim() || undefined,
-      cartItems,
-      totalAmount,
+      return {
+        productId: String(it.product?._id || ""),
+        cartItemId: String(it._id),
+        productName: it.product?.name || undefined,
+        category: (it.product as any)?.category || undefined,
+        quantity: Number(it.quantity) || 1,
+        price: Number(unitPrice) || 0,
+        size: it.size ?? undefined,
+      };
     });
-    setPromoCalc(res);
-  } catch (e: any) {
+
+    const totalAmount = cartItems.reduce((acc, ci) => acc + ci.price * ci.quantity, 0);
+    return { cartItems, totalAmount };
+  }
+
+  // 🔹 NUEVO (envíos): construir items con peso/dimensiones
+  function buildShippingItems(items: CartItem[]): import("@/lib/shippingApi").ShipItem[] {
+    return items.map((it) => {
+      const p: any = it.product || {};
+      const weight = typeof p.weight === "number" ? p.weight : 0.5; // kg default
+      const dims = p.dimensions || p.package || {};
+      const length = Number(dims.length ?? 20);
+      const width  = Number(dims.width  ?? 15);
+      const height = Number(dims.height ?? 10);
+      return {
+        productId: String(p._id || ""),
+        quantity: Number(it.quantity) || 1,
+        weight,
+        dimensions: { length, width, height },
+      };
+    });
+  }
+
+  // 🔹 NUEVO: fetch promos activas y tipos
+  async function fetchActivePromotions(params?: { type?: string; category?: string }) {
+    const qs = new URLSearchParams();
+    if (params?.type) qs.set("type", params.type);
+    if (params?.category) qs.set("category", params.category);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return apiFetch<{ promotions: Promotion[] }>(`/promotions/active${suffix}`, { method: "GET" });
+  }
+  async function fetchPromotionTypes() {
+    return apiFetch<{ types: PromotionType[] }>(`/promotions/types`, { method: "GET" });
+  }
+
+  async function handleCalculateShipping(e: React.FormEvent) {
+    e.preventDefault();
+    setShipOptions(null);
+    setShipCalcErr(null);
+
+    if (!addressId.trim()) {
+      setShipCalcErr("Indicá un addressId (ej: addr_001)");
+      return;
+    }
+    if (items.length === 0) {
+      setShipCalcErr("El carrito está vacío");
+      return;
+    }
+
+    setShipCalcLoading(true);
+    try {
+      const cartItems = buildShippingItems(items);
+      const res = await calculateShipping({ addressId: addressId.trim(), cartItems });
+      setShipOptions(res.options || []);
+    } catch (e: any) {
+      setShipOptions(null);
+      setShipCalcErr(e?.message || "No se pudo calcular el envío");
+    } finally {
+      setShipCalcLoading(false);
+    }
+  }
+
+  // 🔹 NUEVO: aplicar descuentos (POST /promotions/apply-discounts)
+  async function applyDiscounts(payload: { couponCode?: string; cartItems: ApplyDiscountsRequestItem[]; totalAmount: number }) {
+    return apiFetch<ApplyDiscountsResponse>(`/promotions/apply-discounts`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  // 🔹 NUEVO: validar cupón (POST /promotions/validate-coupon)
+  async function validateCoupon(couponCode: string, userId?: string) {
+    return apiFetch<ValidateCouponResponse>(`/promotions/validate-coupon`, {
+      method: "POST",
+      body: JSON.stringify({ couponCode, userId }),
+    });
+  }
+
+  useEffect(() => {
     setPromoCalc(null);
-    setPromoCalcErr(e?.message || "No se pudieron aplicar los descuentos");
+    setCouponValidation(null);
+    setCouponResult(null); // 👈 limpiamos el resultado cuando cambie el texto del cupón
+  }, [couponCode]);
+
+  // 🔹 NUEVO: cargar promos activas + tipos al montar
+  useEffect(() => {
+    let abort = false;
+    (async () => {
+      setPromosLoading(true);
+      setPromosErr(null);
+      try {
+        const [actives, types] = await Promise.all([fetchActivePromotions(), fetchPromotionTypes()]);
+        if (!abort) {
+          setActivePromos(Array.isArray(actives?.promotions) ? actives.promotions : []);
+          setPromoTypes(Array.isArray(types?.types) ? types.types : []);
+        }
+      } catch (e: any) {
+        if (!abort) setPromosErr(e?.message || "No se pudieron cargar las promociones");
+      } finally {
+        if (!abort) setPromosLoading(false);
+      }
+    })();
+    return () => {
+      abort = true;
+    };
+  }, []);
+
+
+  async function loadCartValidate() {
+  setCartValidateLoading(true);
+  setCartValidateErr(null);
+  try {
+    const r = await apiFetch<CartValidateResponse>(`/cart/validate`, { method: "GET" });
+    const payload: CartValidateData =
+      (r as CartValidateWrapped)?.success === true
+        ? (r as CartValidateWrapped).data
+        : (r as CartValidateData);
+
+    if (typeof payload?.valid !== "boolean" || !Array.isArray(payload.errors) || !Array.isArray(payload.warnings)) {
+      throw new Error("Formato inesperado en /cart/validate");
+    }
+    setCartValidate(payload);
+  } catch (e: any) {
+    setCartValidate(null);
+    setCartValidateErr(e?.message || "No se pudo validar el carrito");
   } finally {
-    setPromoCalcLoading(false);
+    setCartValidateLoading(false);
   }
 }
 
+
+async function loadCartWithShipping() {
+  setWithShipLoading(true);
+  setWithShipErr(null);
+  try {
+    const r = await apiFetch<WithShippingResponse>(`/cart/with-shipping`, { method: "GET" });
+    const payload: WithShippingData =
+      (r as WithShippingWrapped)?.success === true
+        ? (r as WithShippingWrapped).data
+        : (r as WithShippingData);
+
+    if (!payload?.summary || !payload?.shipping) {
+      throw new Error("Formato inesperado en /cart/with-shipping");
+    }
+
+    setWithShip(payload);
+
+    // opcional: pre-seleccionar primera tarifa
+    setSelectedRate(payload.shipping.rates?.[0] ?? null);
+
+    // opcional: rellenar campos de envío si vinieron desde el back
+    if (payload.shipping.address) {
+      setShipCity(payload.shipping.address.city ?? "");
+      setShipZip(payload.shipping.address.postal_code ?? "");
+      setShipCountry(payload.shipping.address.country ?? "");
+    }
+  } catch (e: any) {
+    setWithShip(null);
+    setSelectedRate(null);
+    setWithShipErr(e?.message || "No se pudo obtener carrito con envío");
+  } finally {
+    setWithShipLoading(false);
+  }
+}
+
+
+  // 🔹 NUEVO: validar cupón sin aplicarlo
+  async function handleValidateCoupon(e: React.FormEvent) {
+    e.preventDefault();
+    setCouponValidation(null);
+    if (!couponCode.trim()) return;
+    setCouponValidating(true);
+    try {
+      const res = await validateCoupon(couponCode.trim());
+      setCouponValidation(res);
+    } catch (e: any) {
+      setCouponValidation({ valid: false, message: e?.message || "No se pudo validar el cupón" });
+    } finally {
+      setCouponValidating(false);
+    }
+  }
+
+  async function loadCartTotal() {
+  setCartTotalLoading(true);
+  setCartTotalErr(null);
+  try {
+    const r = await apiFetch<CartTotalResponse>(`/cart/total`, { method: "GET" });
+    const payload: CartTotalData =
+      (r as CartTotalWrapped)?.success === true
+        ? (r as CartTotalWrapped).data
+        : (r as CartTotalData);
+
+    if (!payload || typeof payload.subtotal !== "number") {
+      throw new Error("Formato inesperado en /cart/total");
+    }
+    setCartTotalSummary(payload);
+  } catch (e: any) {
+    setCartTotalSummary(null);
+    setCartTotalErr(e?.message || "No se pudo obtener /cart/total");
+  } finally {
+    setCartTotalLoading(false);
+  }
+}
+
+
+  // 🔹 NUEVO: calcular descuentos con /promotions/apply-discounts (sobre el carrito actual)
+  async function handleApplyPromotions(e: React.FormEvent) {
+    e.preventDefault();
+    setPromoCalc(null);
+    setPromoCalcErr(null);
+    setPromoCalcLoading(true);
+    try {
+      const { cartItems, totalAmount } = buildApplyDiscountsPayload(items);
+      const res = await applyDiscounts({
+        couponCode: couponCode.trim() || undefined,
+        cartItems,
+        totalAmount,
+      });
+      setPromoCalc(res);
+    } catch (e: any) {
+      setPromoCalc(null);
+      setPromoCalcErr(e?.message || "No se pudieron aplicar los descuentos");
+    } finally {
+      setPromoCalcLoading(false);
+    }
+  }
+
+
+  async function handleSaveShippingAddress(e: React.FormEvent) {
+  e.preventDefault();
+  setSaveAddrMsg(null);
+  setSavingAddr(true);
+  try {
+    const body: SaveShippingAddressBody = {
+      fullName: addrFullName.trim(),
+      phone: addrPhone.trim(),
+      addressLine: addrLine.trim(),
+      city: addrCity.trim(),
+      postalCode: addrPostal.trim(),
+      province: addrProvince.trim(),
+      notes: addrNotes.trim(),
+    };
+
+    const r = await apiFetch<SaveShippingAddressResponse>(`/cart/shipping/address`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+
+    // Mensaje de éxito (usa el message de data o el superior)
+    const msg =
+      r?.data?.message || r?.message || "Dirección de envío guardada ✅";
+    setSaveAddrMsg(msg);
+
+    // (Opcional) sincronizá con los campos que usás para crear el pedido
+    // y con el addressId de tu cálculo de envío si te sirve.
+    setShipStreet(body.addressLine);
+    setShipCity(body.city);
+    setShipZip(body.postalCode);
+    setShipCountry((r?.data?.shippingAddress?.country as string) || "MX");
+
+    // Si querés refrescar carrito completo:
+    // await loadCart();
+  } catch (e: any) {
+    const m = e?.message || "No se pudo guardar la dirección";
+    setSaveAddrMsg(m);
+    if (m.toLowerCase().includes("no autenticado")) {
+      window.location.href = "/auth?redirectTo=/carrito";
+    }
+  } finally {
+    setSavingAddr(false);
+  }
+}
+
+
+function money(n?: number, ccy?: string) {
+  if (typeof n !== "number") return "";
+  const code = ccy || "ARS"; // default
+  try {
+    return new Intl.NumberFormat("es-AR", { style: "currency", currency: code }).format(n);
+  } catch {
+    return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(n);
+  }
+}
+async function loadCartSummaryPlain() {
+  setPlainSummaryLoading(true);
+  setPlainSummaryErr(null);
+  try {
+    const r = await apiFetch<CartSummaryPlainWrapped | CartSummaryPlain>(`/cart/summary`, { method: "GET" });
+    const payload: CartSummaryPlain =
+      (r as CartSummaryPlainWrapped)?.success === true
+        ? (r as CartSummaryPlainWrapped).data
+        : (r as CartSummaryPlain);
+
+    if (!payload || typeof payload.subtotal !== "number") {
+      throw new Error("Formato inesperado en /cart/summary");
+    }
+    setPlainSummary(payload);
+  } catch (e: any) {
+    setPlainSummary(null);
+    setPlainSummaryErr(e?.message || "No se pudo obtener el resumen");
+  } finally {
+    setPlainSummaryLoading(false);
+  }
+}
 
 
   function normalizeCart(resp: CartResponse): CartData {
@@ -446,9 +845,7 @@ async function handleApplyPromotions(e: React.FormEvent) {
 
     const rawItems: any[] = Array.isArray(payload?.items) ? payload.items : [];
     const normalizedItems: CartItem[] = rawItems.map((it) => {
-      // ID del cart item
       const itemId = it._id || it.id || it.itemId || "";
-      // Si viene product anidado
       if (it.product) {
         return {
           _id: String(itemId),
@@ -464,7 +861,6 @@ async function handleApplyPromotions(e: React.FormEvent) {
           subtotal: typeof it.subtotal === "number" ? it.subtotal : undefined,
         };
       }
-      // Si viene plano con productId/productName
       return {
         _id: String(itemId),
         product: { _id: it.productId, name: it.productName },
@@ -501,7 +897,6 @@ async function handleApplyPromotions(e: React.FormEvent) {
       setCartDiscounts(cart.discounts ?? []);
       setCartFinalTotal(cart.finalTotal ?? null);
 
-      // Inicializar controles de edición
       const next: Record<string, { quantity: number; size: string }> = {};
       (cart.items || []).forEach((it) => {
         next[it._id] = {
@@ -521,30 +916,63 @@ async function handleApplyPromotions(e: React.FormEvent) {
     }
   }
 
-  
-
   useEffect(() => {
     loadCart();
   }, []);
-async function loadCartSummary(withCoupon?: string) {
+
+  async function loadCartSummary(withCoupon?: string) {
   setSummaryLoading(true);
   setSummaryErr(null);
   try {
     const qs = withCoupon ? `?couponCode=${encodeURIComponent(withCoupon)}` : "";
-    const r = await apiFetch<CartSummaryResponse>(`/cart/summary-with-discounts${qs}`, { method: "GET" });
-    setSummary(r);
-  } catch (e: any) {
+    const r = await apiFetch<CartSummaryWithDiscountsResponse>(`/cart/summary-with-discounts${qs}`, { method: "GET" });
+
+    const payload: CartSummaryWithDiscountsData =
+      (r as CartSummaryWithDiscountsWrapped)?.success === true
+        ? (r as CartSummaryWithDiscountsWrapped).data
+        : (r as CartSummaryWithDiscountsData);
+
+    if (!payload?.cartSummary) {
+      throw new Error("Formato inesperado en /cart/summary-with-discounts");
+    }
+
+    // Nuevo summary "v2"
+    setSummaryV2(payload);
+
+    // Evito que choque con el render viejo (lo dejamos en null)
     setSummary(null);
+  } catch (e: any) {
+    setSummaryV2(null);
     setSummaryErr(e?.message || "No se pudo obtener el resumen con descuentos");
   } finally {
     setSummaryLoading(false);
   }
 }
 
-async function handleApplyCoupon(e: React.FormEvent) {
-  e.preventDefault();
-  await loadCartSummary(couponCode.trim() || undefined);
-}
+  /* ===== NUEVO: aplicar cupón por POST /cart/apply-coupon con fallback ===== */
+  async function handleApplyCoupon(e: React.FormEvent) {
+    e.preventDefault();
+    setSummaryLoading(true);
+    setSummaryErr(null);
+    setCouponResult(null);
+    setSummary(null); // limpiamos el otro resumen para no mezclar pantallas
+    try {
+      const body: Record<string, any> = {};
+      if (couponCode.trim()) body.couponCode = couponCode.trim();
+      // si tu back necesita cartId o userId, podés agregarlos acá
+      const res = await apiFetch<ApplyCouponResponse>(`/cart/apply-coupon`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      setCouponResult(res);
+    } catch (err: any) {
+      // fallback a tu endpoint anterior
+      await loadCartSummary(couponCode.trim() || undefined);
+      setSummaryErr((prev) => prev || err?.message || "No se pudo aplicar el cupón");
+    } finally {
+      setSummaryLoading(false);
+    }
+  }
 
   /* ===== Add / Update / Remove ===== */
   async function handleAddToCart(e: React.FormEvent) {
@@ -559,15 +987,13 @@ async function handleApplyCoupon(e: React.FormEvent) {
       const s = addSize.trim();
       const c = addColor.trim();
       if (s) payload.size = s;
-      if (c) payload.color = c; // 👈 NUEVO: enviar color si se completó
+      if (c) payload.color = c;
 
-      // Soportar respuesta 201 del contrato o backends que devuelven otra forma
       const r = await apiFetch<AddToCartResponse | CartResponse>("/cart/add", {
         method: "POST",
         body: JSON.stringify(payload),
       });
 
-      // Feedback inmediato si vino AddToCartResponse
       if ((r as AddToCartResponse)?.cartTotal !== undefined) {
         const ar = r as AddToCartResponse;
         setCartTotal(ar.cartTotal);
@@ -576,14 +1002,9 @@ async function handleApplyCoupon(e: React.FormEvent) {
         setAddMsg("Producto agregado 👍");
       }
 
-      // Refrescar carrito para ver ítems actualizados
       await loadCart();
-
-      // Limpiar solo cantidad si querés seguir agregando mismo producto/variante
-      // (dejamos productId/size/color por comodidad)
       setAddQty(1);
     } catch (e: any) {
-      // Ej.: 400 -> { success:false, message:"Insufficient stock", error:"INSUFFICIENT_STOCK" }
       const msg = e?.message || "No se pudo agregar";
       setAddMsg(msg);
     } finally {
@@ -591,82 +1012,115 @@ async function handleApplyCoupon(e: React.FormEvent) {
     }
   }
 
- async function handleUpdateItem(itemId: string) {
-  setUpdateMsg(null);
-  setUpdatingId(itemId);
-  try {
-    const current = edits[itemId] || { quantity: 1, size: "" };
-    // ✔ quantity >= 1, entero
-    const q = Math.max(1, Math.floor(Number(current.quantity) || 1));
+  async function handleUpdateItem(itemId: string) {
+    setUpdateMsg(null);
+    setUpdatingId(itemId);
+    try {
+      const current = edits[itemId] || { quantity: 1, size: "" };
+      const q = Math.max(1, Math.floor(Number(current.quantity) || 1));
 
-    // 🔁 Contrato correcto: PUT /cart/:itemId
-    const r = await apiFetch<UpdateCartItemResponse | CartResponse>(`/cart/${itemId}`, {
-      method: "PUT",
-      body: JSON.stringify({ quantity: q }), // ✔ solo quantity
-    });
+      const r = await apiFetch<UpdateCartItemResponse | CartResponse>(`/cart/${itemId}`, {
+        method: "PUT",
+        body: JSON.stringify({ quantity: q }),
+      });
 
-    // 👍 Si viene el contrato nuevo, actualizamos UI al instante
-    if ((r as any)?.cartItem && (r as any)?.cartTotal !== undefined) {
-      const ur = r as UpdateCartItemResponse;
-      setCartTotal(ur.cartTotal);
-      setItems((prev) =>
-        prev.map((it) =>
-          it._id === ur.cartItem._id
-            ? { ...it, quantity: ur.cartItem.quantity, subtotal: ur.cartItem.subtotal }
-            : it
-        )
-      );
-      setUpdateMsg(ur.message || "Ítem actualizado ✅");
-    } else {
-      setUpdateMsg("Ítem actualizado ✅");
+      if ((r as any)?.cartItem && (r as any)?.cartTotal !== undefined) {
+        const ur = r as UpdateCartItemResponse;
+        setCartTotal(ur.cartTotal);
+        setItems((prev) =>
+          prev.map((it) =>
+            it._id === ur.cartItem._id
+              ? { ...it, quantity: ur.cartItem.quantity, subtotal: ur.cartItem.subtotal }
+              : it
+          )
+        );
+        setUpdateMsg(ur.message || "Ítem actualizado ✅");
+      } else {
+        setUpdateMsg("Ítem actualizado ✅");
+      }
+
+      await loadCart();
+    } catch (e: any) {
+      setUpdateMsg(e?.message || "No se pudo actualizar el ítem");
+    } finally {
+      setUpdatingId(null);
     }
-
-    // 🔄 Igual sincronizamos todo con el backend
-    await loadCart();
-  } catch (e: any) {
-    setUpdateMsg(e?.message || "No se pudo actualizar el ítem");
-  } finally {
-    setUpdatingId(null);
   }
-}
 
-
- async function handleRemoveItem(itemId: string) {
+  async function handleRemoveItem(itemId: string) {
   setRemoveMsg(null);
   setRemovingId(itemId);
   try {
-    // ✔ Contrato correcto: DELETE /cart/:itemId
-    const r = await apiFetch<DeleteCartItemResponse | CartResponse>(`/cart/${itemId}`, {
+    // 👇 endpoint correcto
+    const r = await apiFetch<RemoveCartItemResponse | CartResponse>(`/cart/remove/${itemId}`, {
       method: "DELETE",
     });
 
-    // ✅ Actualización optimista si viene el contrato nuevo
-    if ((r as any)?.cartTotal !== undefined) {
-      const dr = r as DeleteCartItemResponse;
-      // sacamos el item localmente
-      setItems((prev) => prev.filter((it) => it._id !== itemId));
-      // actualizamos total del carrito
-      setCartTotal(dr.cartTotal);
-      // recalculamos conteo de ítems mostrado (fallback al derived)
-      setCartTotalItems((prev) => (prev !== null ? Math.max(0, prev - 1) : prev));
-      // si quedó vacío, limpiamos extras (opcional)
-      if (dr.cartTotal === 0) {
-        setCartDiscounts([]);
-        setCartFinalTotal(null);
-      }
-      setRemoveMsg(dr.message || "Ítem eliminado 🗑️");
-    } else {
-      setRemoveMsg("Ítem eliminado 🗑️");
-    }
+    // Soporta ambos shapes: {success,data} o plano
+    const cart = normalizeCart(r as any);
 
-    // 🔄 Sincronizamos con el backend para asegurar totales/ descuentos
-    await loadCart();
+    // Estado desde servidor
+    setItems(cart.items || []);
+    setCartId(cart._id ?? null);
+    setCartTotal(cart.total ?? null);
+    setCartTotalItems(cart.totalItems ?? (cart.items?.length ?? 0));
+    setCartDiscounts(cart.discounts ?? []);
+    setCartFinalTotal(cart.finalTotal ?? null);
+
+    // Sincronizar los controles de edición
+    const next: Record<string, { quantity: number; size: string }> = {};
+    (cart.items || []).forEach((it) => {
+      next[it._id] = { quantity: Number(it.quantity) || 1, size: (it.size ?? "").toString() };
+    });
+    setEdits(next);
+
+    setRemoveMsg(("message" in (r as any) && (r as any).message) || "Ítem eliminado 🗑️");
   } catch (e: any) {
     setRemoveMsg(e?.message || "No se pudo eliminar el ítem");
+    if (String(e?.message || "").toLowerCase().includes("no autenticado")) {
+      window.location.href = "/auth?redirectTo=/carrito";
+    }
   } finally {
     setRemovingId(null);
   }
 }
+
+  // 🆕 Vaciar carrito (POST /cart/clear)
+// 🆕 Vaciar carrito (GET /cart/clear)
+// Vaciar carrito (DELETE /cart/clear)
+async function handleClearCart() {
+  setClearMsg(null);
+  setClearing(true);
+  try {
+    const r = await apiFetch<ClearCartResponse>(`/cart/clear`, { method: "DELETE" }); // 👈 DELETE
+
+    // Estado optimista
+    setItems([]);
+    setCartTotal(0);
+    setCartTotalItems(0);
+    setCartDiscounts([]);
+    setCartFinalTotal(0);
+
+    // Limpiar vistas auxiliares
+    setCouponResult(null);
+    setSummary(null);
+    setPromoCalc(null);
+    setSummaryErr(null);
+
+    // (opcional) si preferís 100% server-truth:
+    // await loadCart();
+
+    setClearMsg(r?.message ?? "Carrito vaciado 🧹");
+  } catch (e: any) {
+    setClearMsg(e?.message || "No se pudo vaciar el carrito");
+    if (String(e?.message || "").toLowerCase().includes("no autenticado")) {
+      window.location.href = "/auth?redirectTo=/carrito";
+    }
+  } finally {
+    setClearing(false);
+  }
+}
+
 
   async function handleCreateOrder(e: React.FormEvent) {
     e.preventDefault();
@@ -713,6 +1167,11 @@ async function handleApplyCoupon(e: React.FormEvent) {
 
       setOrderCreated(r.data);
       setOrderMsg("Pedido creado ✅");
+
+      // ⭐ Redirección al detalle del pedido recién creado
+      const newOrderId = (r as any)?.data?._id;
+      router.push(newOrderId ? `/pedidos/${newOrderId}` : `/pedidos`);
+
       await loadCart();
     } catch (e: any) {
       setOrderMsg(e?.message || "No se pudo crear el pedido");
@@ -730,620 +1189,1044 @@ async function handleApplyCoupon(e: React.FormEvent) {
   );
 
   return (
-    <main style={{ maxWidth: 960, margin: "24px auto", padding: "0 16px" }}>
-      <header style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, marginBottom: 16 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Tu carrito</h1>
+  <main className={s.page} style={{ maxWidth: 960, margin: "24px auto", padding: "0 16px" }}>
+    <header className={s.header} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, marginBottom: 16 }}>
+      <h1 className={s.title} style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Tu carrito</h1>
 
-        {/* Mini form para probar /cart/add */}
-        <form
-          onSubmit={handleAddToCart}
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(220px,1fr) 88px 96px 120px auto", // 👈 se sumó columna de color
-            gap: 8,
-            alignItems: "center",
-          }}
-          title="Agregar producto al carrito (prueba de /cart/add)"
-        >
-          <input
-            placeholder="productId (MongoID)"
-            value={addProductId}
-            onChange={(e) => setAddProductId(e.target.value)}
-            required
-            style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
-          />
-          <input
-            type="number"
-            min={1}
-            value={addQty}
-            onChange={(e) => setAddQty(parseInt(e.target.value || "1", 10))}
-            style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
-          />
-          <input
-            placeholder="Talle (opcional)"
-            value={addSize}
-            onChange={(e) => setAddSize(e.target.value)}
-            style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
-          />
-          <input
-            placeholder="Color (opcional)" // 👈 NUEVO input color
-            value={addColor}
-            onChange={(e) => setAddColor(e.target.value)}
-            style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
-          />
-          <button
-            type="submit"
-            disabled={adding || !addProductId}
-            style={{
-              padding: "8px 12px",
-              borderRadius: 8,
-              border: "1px solid #ddd",
-              background: adding ? "#f3f3f3" : "white",
-              cursor: adding ? "default" : "pointer",
-              fontWeight: 600,
-            }}
-          >
-            {adding ? "Agregando…" : "Agregar"}
-          </button>
-        </form>
-      </header>
-
-      {addMsg && (
-        <p style={{ marginTop: -8, marginBottom: 8, color: addMsg.toLowerCase().includes("agregado") || addMsg.includes("👍") ? "green" : "crimson" }}>
-          {addMsg}
-        </p>
-      )}
-      {removeMsg && (
-        <p style={{ marginTop: 0, color: removeMsg.includes("🗑️") ? "green" : "crimson" }}>{removeMsg}</p>
-      )}
-
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+      {/* Mini form para probar /cart/add */}
+      <form
+        onSubmit={handleAddToCart}
+        className={s.addForm}
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(220px,1fr) 88px 96px 120px auto",
+          gap: 8,
+          alignItems: "center",
+        }}
+        title="Agregar producto al carrito (prueba de /cart/add)"
+      >
+        <input
+          className={s.input}
+          placeholder="productId (MongoID)"
+          value={addProductId}
+          onChange={(e) => setAddProductId(e.target.value)}
+          required
+          style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
+        />
+        <input
+          className={`${s.input} ${s.inputSm}`}
+          type="number"
+          min={1}
+          value={addQty}
+          onChange={(e) => setAddQty(parseInt(e.target.value || "1", 10))}
+          style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
+        />
+        <input
+          className={s.input}
+          placeholder="Talle (opcional)"
+          value={addSize}
+          onChange={(e) => setAddSize(e.target.value)}
+          style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
+        />
+        <input
+          className={s.input}
+          placeholder="Color (opcional)"
+          value={addColor}
+          onChange={(e) => setAddColor(e.target.value)}
+          style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
+        />
         <button
-          onClick={loadCart}
+          type="submit"
+          disabled={adding || !addProductId}
+          className={s.btnPrimary}
           style={{
             padding: "8px 12px",
             borderRadius: 8,
             border: "1px solid #ddd",
-            background: "white",
-            cursor: "pointer",
+            background: adding ? "#f3f3f3" : "white",
+            cursor: adding ? "default" : "pointer",
+            fontWeight: 600,
           }}
         >
-          Actualizar
+          {adding ? "Agregando…" : "Agregar"}
         </button>
+      </form>
+    </header>
 
-<div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-  <form onSubmit={handleApplyCoupon} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-    <input
-      placeholder="Cupón (opcional)"
-      value={couponCode}
-      onChange={(e) => setCouponCode(e.target.value)}
-      style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", width: 160 }}
-    />
-    <button
-      type="submit"
-      disabled={summaryLoading}
-      style={{
-        padding: "8px 12px",
-        borderRadius: 8,
-        border: "1px solid #ddd",
-        background: summaryLoading ? "#f3f3f3" : "white",
-        cursor: summaryLoading ? "default" : "pointer",
-        fontWeight: 600,
-      }}
-      title="Aplicar cupón (GET /cart/summary-with-discounts)"
-    >
-      {summaryLoading ? "Aplicando…" : "Aplicar cupón (Resumen carrito)"}
-    </button>
-  </form>
+    {addMsg && (
+      <p style={{ marginTop: -8, marginBottom: 8, color: addMsg.toLowerCase().includes("agregado") || addMsg.includes("👍") ? "green" : "crimson" }}>
+        {addMsg}
+      </p>
+    )}
+    {removeMsg && (
+      <p style={{ marginTop: 0, color: removeMsg.includes("🗑️") ? "green" : "crimson" }}>{removeMsg}</p>
+    )}
 
-  {/* 🔹 NUEVO: validar cupón (POST /promotions/validate-coupon) */}
-  <form onSubmit={handleValidateCoupon}>
-    <button
-      type="submit"
-      disabled={couponValidating || !couponCode.trim()}
-      style={{
-        padding: "8px 12px",
-        borderRadius: 8,
-        border: "1px solid #ddd",
-        background: couponValidating ? "#f3f3f3" : "white",
-        cursor: couponValidating ? "default" : "pointer",
-        fontWeight: 600,
-      }}
-      title="Validar cupón (POST /promotions/validate-coupon)"
-    >
-      {couponValidating ? "Validando…" : "Validar cupón"}
-    </button>
-  </form>
+    {clearMsg && (
+      <p style={{ marginTop: 0, color: clearMsg.includes("🧹") ? "green" : "crimson" }}>{clearMsg}</p>
+    )}
 
-  {/* 🔹 NUEVO: aplicar descuentos usando Promos API */}
-  <form onSubmit={handleApplyPromotions}>
-    <button
-      type="submit"
-      disabled={promoCalcLoading || items.length === 0}
-      style={{
-        padding: "8px 12px",
-        borderRadius: 8,
-        border: "1px solid #ddd",
-        background: promoCalcLoading ? "#f3f3f3" : "white",
-        cursor: promoCalcLoading ? "default" : "pointer",
-        fontWeight: 600,
-      }}
-      title="Calcular descuentos (POST /promotions/apply-discounts)"
-    >
-      {promoCalcLoading ? "Calculando…" : "Calcular descuentos (Promos API)"}
-    </button>
-  </form>
+    <div className={s.toolbar} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+      <button
+        onClick={loadCart}
+        className={s.btn}
+        style={{
+          padding: "8px 12px",
+          borderRadius: 8,
+          border: "1px solid #ddd",
+          background: "white",
+          cursor: "pointer",
+        }}
+      >
+        Actualizar
+      </button>
 
-  {/* 🔹 Feedback de validación de cupón */}
-  {couponValidation && (
-    <span
-      style={{
-        padding: "4px 8px",
-        borderRadius: 8,
-        background: couponValidation.valid ? "#e9f9ee" : "#fde8e8",
-        color: couponValidation.valid ? "#116329" : "#b00020",
-        fontSize: 13,
-      }}
-    >
-      {couponValidation.valid
-        ? (couponValidation.message || "Cupón válido ✅")
-        : (couponValidation.message || "Cupón inválido")}
-    </span>
-  )}
-</div>
+      <button
+        onClick={handleClearCart}
+        disabled={clearing || items.length === 0}
+        className={s.btnDanger}
+        style={{
+          padding: "8px 12px",
+          borderRadius: 8,
+          border: "1px solid #f1c0c0",
+          background: clearing ? "#f8eaea" : "white",
+          color: "#b00020",
+          cursor: clearing ? "default" : "pointer",
+          fontWeight: 600,
+        }}
+        title="Vaciar carrito (POST /cart/clear)"
+      >
+        {clearing ? "Vaciando…" : "Vaciar carrito"}
+      </button>
 
+      <button
+        onClick={loadCartSummaryPlain}
+        disabled={plainSummaryLoading}
+        className={s.btn}
+        style={{
+          padding: "8px 12px",
+          borderRadius: 8,
+          border: "1px solid #ddd",
+          background: plainSummaryLoading ? "#f3f3f3" : "white",
+          cursor: plainSummaryLoading ? "default" : "pointer",
+          fontWeight: 600,
+        }}
+        title="Resumen sin descuentos (GET /cart/summary)"
+      >
+        {plainSummaryLoading ? "Resumiendo…" : "Resumen simple"}
+      </button>
+      {plainSummaryErr && <span style={{ color: "crimson" }}>{plainSummaryErr}</span>}
 
+      <button
+        onClick={loadCartValidate}
+        disabled={cartValidateLoading}
+        className={s.btn}
+        style={{
+          padding: "8px 12px",
+          borderRadius: 8,
+          border: "1px solid #ddd",
+          background: cartValidateLoading ? "#f3f3f3" : "white",
+          cursor: cartValidateLoading ? "default" : "pointer",
+          fontWeight: 600,
+        }}
+        title="Validar carrito (GET /cart/validate)"
+      >
+        {cartValidateLoading ? "Validando…" : "Validar carrito"}
+      </button>
+      {cartValidateErr && <span style={{ color: "crimson" }}>{cartValidateErr}</span>}
 
-        <div style={{ opacity: 0.8 }}>
-          Ítems: <strong>{cartTotalItems ?? derivedTotalItems}</strong>
+      <button
+        onClick={loadCartTotal}
+        disabled={cartTotalLoading}
+        className={s.btn}
+        style={{
+          padding: "8px 12px",
+          borderRadius: 8,
+          border: "1px solid #ddd",
+          background: cartTotalLoading ? "#f3f3f3" : "white",
+          cursor: cartTotalLoading ? "default" : "pointer",
+          fontWeight: 600,
+        }}
+        title="Resumen total (GET /cart/total)"
+      >
+        {cartTotalLoading ? "Obteniendo…" : "Total (nuevo)"}
+      </button>
+      {cartTotalErr && <span style={{ color: "crimson" }}>{cartTotalErr}</span>}
+
+      <button
+        onClick={loadCartWithShipping}
+        disabled={withShipLoading}
+        className={s.btn}
+        style={{
+          padding: "8px 12px",
+          borderRadius: 8,
+          border: "1px solid #ddd",
+          background: withShipLoading ? "#f3f3f3" : "white",
+          cursor: withShipLoading ? "default" : "pointer",
+          fontWeight: 600,
+        }}
+        title="Carrito + tarifas de envío (GET /cart/with-shipping)"
+      >
+        {withShipLoading ? "Cargando…" : "Carrito + envío"}
+      </button>
+      {withShipErr && <span style={{ color: "crimson" }}>{withShipErr}</span>}
+
+      {cartValidate && (
+        <div
+          style={{
+            margin: "6px 0 10px",
+            padding: "8px 10px",
+            borderRadius: 8,
+            border: `1px solid ${cartValidate.valid ? "#cce6d2" : "#f1c0c0"}`,
+            background: cartValidate.valid ? "#e9f9ee" : "#fde8e8",
+            color: cartValidate.valid ? "#116329" : "#b00020",
+            fontSize: 14
+          }}
+        >
+          <strong>{cartValidate.valid ? "Carrito válido ✅" : "Hay problemas en tu carrito"}</strong>
+          {!!cartValidate.errors.length && (
+            <ul style={{ margin: "6px 0 0 18px" }}>
+              {cartValidate.errors.map((e, i) => <li key={i}>{e}</li>)}
+            </ul>
+          )}
+          {!!cartValidate.warnings.length && (
+            <div style={{ marginTop: 6, opacity: 0.9 }}>
+              <div style={{ fontWeight: 600 }}>Advertencias:</div>
+              <ul style={{ margin: "4px 0 0 18px" }}>
+                {cartValidate.warnings.map((w, i) => <li key={i}>{w}</li>)}
+              </ul>
+            </div>
+          )}
         </div>
+      )}
 
-        {typeof cartTotal === "number" && (
-          <div style={{ opacity: 0.8 }}>
-            Total: <strong>{currency(cartTotal)}</strong>
-          </div>
-        )}
+      <div className={s.toolbar} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <form onSubmit={handleApplyCoupon} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input
+            className={s.input}
+            placeholder="Cupón (opcional)"
+            value={couponCode}
+            onChange={(e) => setCouponCode(e.target.value)}
+            style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", width: 160 }}
+          />
+          <button
+            type="submit"
+            disabled={summaryLoading}
+            className={s.btn}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 8,
+              border: "1px solid #ddd",
+              background: summaryLoading ? "#f3f3f3" : "white",
+              cursor: summaryLoading ? "default" : "pointer",
+              fontWeight: 600,
+            }}
+            title="Aplicar cupón (POST /cart/apply-coupon con fallback a GET /cart/summary-with-discounts)"
+          >
+            {summaryLoading ? "Aplicando…" : "Resumen carrito"}
+          </button>
+        </form>
 
-        {cartId && (
-          <div style={{ marginLeft: "auto", fontSize: 12, opacity: 0.7 }}>
-            cartId:&nbsp;<code>{cartId}</code>
-          </div>
+        {/* 🔹 NUEVO: validar cupón (POST /promotions/validate-coupon) */}
+        <form onSubmit={handleValidateCoupon}>
+          <button
+            type="submit"
+            disabled={couponValidating || !couponCode.trim()}
+            className={s.btn}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 8,
+              border: "1px solid #ddd",
+              background: couponValidating ? "#f3f3f3" : "white",
+              cursor: couponValidating ? "default" : "pointer",
+              fontWeight: 600,
+            }}
+            title="Validar cupón (POST /promotions/validate-coupon)"
+          >
+            {couponValidating ? "Validando…" : "Validar cupón"}
+          </button>
+        </form>
+
+        {/* 🔹 NUEVO: aplicar descuentos usando Promos API */}
+        <form onSubmit={handleApplyPromotions}>
+          <button
+            type="submit"
+            disabled={promoCalcLoading || items.length === 0}
+            className={s.btn}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 8,
+              border: "1px solid #ddd",
+              background: promoCalcLoading ? "#f3f3f3" : "white",
+              cursor: promoCalcLoading ? "default" : "pointer",
+              fontWeight: 600,
+            }}
+            title="Calcular descuentos (POST /promotions/apply-discounts)"
+          >
+            {promoCalcLoading ? "Calculando…" : "Calcular descuentos (Promos API)"}
+          </button>
+        </form>
+
+        {/* 🔹 Feedback de validación de cupón */}
+        {couponValidation && (
+          <span
+            className={couponValidation.valid ? s.badgeOk : s.badgeWarn}
+            style={{
+              padding: "4px 8px",
+              borderRadius: 8,
+              background: couponValidation.valid ? "#e9f9ee" : "#fde8e8",
+              color: couponValidation.valid ? "#116329" : "#b00020",
+              fontSize: 13,
+            }}
+          >
+            {couponValidation.valid
+              ? (couponValidation.message || "Cupón válido ✅")
+              : (couponValidation.message || "Cupón inválido")}
+          </span>
         )}
       </div>
 
-      {updateMsg && <p style={{ marginTop: 0, color: updateMsg.includes("✅") ? "green" : "crimson" }}>{updateMsg}</p>}
+      <div style={{ opacity: 0.8 }}>
+        Ítems: <strong>{cartTotalItems ?? derivedTotalItems}</strong>
+      </div>
 
-      {loading && <p>Cargando carrito…</p>}
-      {err && !loading && <p style={{ color: "crimson" }}>{err}</p>}
-
-      {!loading && !err && items.length === 0 && (
-        <div style={{ border: "1px dashed #ccc", borderRadius: 12, padding: 16 }}>
-          <p style={{ margin: 0 }}>Tu carrito está vacío.</p>
-          <p style={{ marginTop: 8 }}>
-            <Link href="/catalogo">Ir al catálogo</Link>
-          </p>
+      {typeof cartTotal === "number" && (
+        <div style={{ opacity: 0.8 }}>
+          Total: <strong>{currency(cartTotal)}</strong>
         </div>
       )}
-{/* 🔹 NUEVO: listado simple de promos activas */}
-<section
-  style={{
-    margin: "8px 0 12px",
-    border: "1px solid #eee",
-    borderRadius: 12,
-    padding: 12,
-    background: "#fff",
-  }}
->
-  <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-    <h3 style={{ margin: 0, fontSize: 16 }}>Promos activas</h3>
-    {promosLoading && <span style={{ fontSize: 12, color: "#666" }}>Cargando…</span>}
-    {!promosLoading && promosErr && <span style={{ fontSize: 12, color: "crimson" }}>{promosErr}</span>}
-  </div>
 
-  {!promosLoading && !promosErr && activePromos.length === 0 && (
-    <div style={{ fontSize: 13, color: "#666", marginTop: 6 }}>No hay promociones activas ahora.</div>
-  )}
-
-  {!promosLoading && !promosErr && activePromos.length > 0 && (
-    <ul style={{ margin: "8px 0 0 18px", padding: 0 }}>
-      {activePromos.map((p) => (
-        <li key={p._id} style={{ marginBottom: 4 }}>
-          <strong>{p.name}</strong>
-          {p.description ? ` — ${p.description}` : ""}
-          {typeof p.discountPercentage === "number" ? ` (−${p.discountPercentage}% )` : ""}
-          {p.conditions?.minimumPurchaseAmount ? ` · min ${currency(p.conditions.minimumPurchaseAmount)}` : ""}
-          {p.conditions?.categories?.length ? ` · cat: ${p.conditions.categories.join(", ")}` : ""}
-        </li>
-      ))}
-    </ul>
-  )}
-</section>
-
-{/* 🔹 NUEVO: Estimá tu envío */}
-<section
-  style={{
-    margin: "8px 0 12px",
-    border: "1px solid #eee",
-    borderRadius: 12,
-    padding: 12,
-    background: "#fff",
-  }}
->
-  <h3 style={{ margin: 0, fontSize: 16, marginBottom: 8 }}>Estimá tu envío</h3>
-
-  <form onSubmit={handleCalculateShipping} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-    <input
-      placeholder="addressId (ej: addr_001)"
-      value={addressId}
-      onChange={(e) => setAddressId(e.target.value)}
-      style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", width: 200 }}
-    />
-    <button
-      type="submit"
-      disabled={shipCalcLoading || items.length === 0}
-      style={{
-        padding: "8px 12px",
-        borderRadius: 8,
-        border: "1px solid #ddd",
-        background: shipCalcLoading ? "#f3f3f3" : "white",
-        cursor: shipCalcLoading ? "default" : "pointer",
-        fontWeight: 600,
-      }}
-      title="Calcular (POST /shipping/calculate)"
-    >
-      {shipCalcLoading ? "Calculando…" : "Calcular envío"}
-    </button>
-
-    {shipCalcErr && <span style={{ color: "crimson" }}>{shipCalcErr}</span>}
-  </form>
-
-  {shipOptions && (
-    <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
-      {shipOptions.length === 0 && <div style={{ color: "#666" }}>No hay opciones disponibles para la dirección indicada.</div>}
-      {shipOptions.map((opt, i) => (
-        <div key={i} style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
-          <strong>{opt.name}</strong>
-          <span>• {opt.description || opt.service}</span>
-          <span>• ETA: {opt.estimatedDays} días</span>
-          <span>• {opt.carrier ?? "Carrier"}</span>
-          <span style={{ marginLeft: "auto" }}>{currency(opt.cost)}</span>
+      {cartId && (
+        <div style={{ marginLeft: "auto", fontSize: 12, opacity: 0.7 }}>
+          cartId:&nbsp;<code>{cartId}</code>
         </div>
-      ))}
+      )}
     </div>
-  )}
-</section>
 
-      {/* Lista de ítems */}
-      {!loading && items.length > 0 && (
-        <div style={{ display: "grid", gap: 12 }}>
-          {items.map((it) => (
-            <article
-              key={it._id}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr auto",
-                gap: 8,
-                padding: 12,
-                border: "1px solid #eee",
-                borderRadius: 12,
-                background: "white",
-              }}
-            >
-              <div>
-                <div style={{ fontWeight: 600 }}>
-                  {it.product?.name ?? "(Producto)"} {it.size ? `• Talle ${it.size}` : ""}{" "}
-                  {it.color ? `• Color ${it.color}` : ""}{" "}
-                  {typeof it.price === "number" ? `• ${currency(it.price)}` : ""}
-                </div>
-                <div style={{ opacity: 0.8, fontSize: 14 }}>
-                  prodId: {it.product?._id ?? "-"} • itemId: {it._id}
-                </div>
+    {updateMsg && <p style={{ marginTop: 0, color: updateMsg.includes("✅") ? "green" : "crimson" }}>{updateMsg}</p>}
 
-                <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center", flexWrap: "wrap" }}>
-                  <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 13, opacity: 0.8 }}>Cant.</span>
-                    <input
-                      type="number"
-                      min={1}
-                      value={edits[it._id]?.quantity ?? it.quantity}
-                      onChange={(e) =>
-                        setEdits((s) => ({
-                          ...s,
-                          [it._id]: {
-                            quantity: Math.max(1, parseInt(e.target.value || "1", 10)),
-                            size: s[it._id]?.size ?? (it.size ?? ""),
-                          },
-                        }))
-                      }
-                      style={{ width: 80, padding: "6px 8px", borderRadius: 8, border: "1px solid #ddd" }}
-                    />
-                  </label>
+    {loading && <p>Cargando carrito…</p>}
+    {err && !loading && <p style={{ color: "crimson" }}>{err}</p>}
 
-                  <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 13, opacity: 0.8 }}>Talle</span>
-                    <input
-                      placeholder="(opcional)"
-                      value={edits[it._id]?.size ?? (it.size ?? "")}
-                      onChange={(e) =>
-                        setEdits((s) => ({
-                          ...s,
-                          [it._id]: {
-                            quantity: s[it._id]?.quantity ?? it.quantity,
-                            size: e.target.value,
-                          },
-                        }))
-                      }
-                      style={{ width: 120, padding: "6px 8px", borderRadius: 8, border: "1px solid #ddd" }}
-                    />
-                  </label>
+    {!loading && !err && items.length === 0 && (
+      <div style={{ border: "1px dashed #ccc", borderRadius: 12, padding: 16 }}>
+        <p style={{ margin: 0 }}>Tu carrito está vacío.</p>
+        <p style={{ marginTop: 8 }}>
+          <Link href="/catalogo">Ir al catálogo</Link>
+        </p>
+      </div>
+    )}
 
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button
-                      type="button"
-                      onClick={() => handleUpdateItem(it._id)}
-                      disabled={updatingId === it._id}
-                      style={{
-                        padding: "8px 12px",
-                        borderRadius: 8,
-                        border: "1px solid #ddd",
-                        background: updatingId === it._id ? "#f3f3f3" : "white",
-                        cursor: updatingId === it._id ? "default" : "pointer",
-                        fontWeight: 600,
-                      }}
-                    >
-                      {updatingId === it._id ? "Actualizando…" : "Actualizar"}
-                    </button>
+    {/* 🔹 NUEVO: listado simple de promos activas */}
+    <section className={s.card}
+      style={{
+        margin: "8px 0 12px",
+        border: "1px solid #eee",
+        borderRadius: 12,
+        padding: 12,
+        background: "#fff",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+        <h3 style={{ margin: 0, fontSize: 16 }}>Promos activas</h3>
+        {promosLoading && <span style={{ fontSize: 12, color: "#666" }}>Cargando…</span>}
+        {!promosLoading && promosErr && <span style={{ fontSize: 12, color: "crimson" }}>{promosErr}</span>}
+      </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveItem(it._id)}
-                      disabled={removingId === it._id}
-                      style={{
-                        padding: "8px 12px",
-                        borderRadius: 8,
-                        border: "1px solid #f1c0c0",
-                        background: removingId === it._id ? "#f8eaea" : "white",
-                        color: "#b00020",
-                        cursor: removingId === it._id ? "default" : "pointer",
-                        fontWeight: 600,
-                      }}
-                      title="Eliminar ítem del carrito"
-                    >
-                      {removingId === it._id ? "Eliminando…" : "Eliminar"}
-                    </button>
-                  </div>
-                </div>
-              </div>
+      {!promosLoading && !promosErr && activePromos.length === 0 && (
+        <div style={{ fontSize: 13, color: "#666", marginTop: 6 }}>No hay promociones activas ahora.</div>
+      )}
 
-              <div style={{ textAlign: "right", fontWeight: 600 }}>
-                x{it.quantity}
-                {typeof it.subtotal === "number" && (
-                  <div style={{ fontWeight: 400, opacity: 0.75 }}>{currency(it.subtotal)}</div>
-                )}
-              </div>
-            </article>
+      {!promosLoading && !promosErr && activePromos.length > 0 && (
+        <ul style={{ margin: "8px 0 0 18px", padding: 0 }}>
+          {activePromos.map((p) => (
+            <li key={p._id} style={{ marginBottom: 4 }}>
+              <strong>{p.name}</strong>
+              {p.description ? ` — ${p.description}` : ""}
+              {typeof p.discountPercentage === "number" ? ` (−${p.discountPercentage}% )` : ""}
+              {p.conditions?.minimumPurchaseAmount ? ` · min ${currency(p.conditions.minimumPurchaseAmount)}` : ""}
+              {p.conditions?.categories?.length ? ` · cat: ${p.conditions.categories.join(", ")}` : ""}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+
+    <section className={s.card}
+      style={{
+        margin: "8px 0 12px",
+        border: "1px solid #eee",
+        borderRadius: 12,
+        padding: 12,
+        background: "#fff",
+      }}
+    >
+      <h3 style={{ margin: 0, fontSize: 16, marginBottom: 8 }}>
+        Dirección de envío (guardar en carrito)
+      </h3>
+
+      <form onSubmit={handleSaveShippingAddress} style={{ display: "grid", gap: 8 }}>
+        <div className={s.grid2} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <input
+            className={s.input}
+            placeholder="Nombre completo"
+            value={addrFullName}
+            onChange={(e) => setAddrFullName(e.target.value)}
+            style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
+            required
+          />
+          <input
+            className={s.input}
+            placeholder="Teléfono"
+            value={addrPhone}
+            onChange={(e) => setAddrPhone(e.target.value)}
+            style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
+            required
+          />
+        </div>
+
+        <input
+          className={s.input}
+          placeholder="Calle y número"
+          value={addrLine}
+          onChange={(e) => setAddrLine(e.target.value)}
+          style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
+          required
+        />
+
+        <div className={s.grid3} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+          <input
+            className={s.input}
+            placeholder="Ciudad"
+            value={addrCity}
+            onChange={(e) => setAddrCity(e.target.value)}
+            style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
+            required
+          />
+          <input
+            className={s.input}
+            placeholder="Código postal"
+            value={addrPostal}
+            onChange={(e) => setAddrPostal(e.target.value)}
+            style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
+            required
+          />
+          <input
+            className={s.input}
+            placeholder="Provincia"
+            value={addrProvince}
+            onChange={(e) => setAddrProvince(e.target.value)}
+            style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
+          />
+        </div>
+
+        <input
+          className={s.input}
+          placeholder="Notas (opcional)"
+          value={addrNotes}
+          onChange={(e) => setAddrNotes(e.target.value)}
+          style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
+        />
+
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button
+            type="submit"
+            disabled={savingAddr}
+            className={s.btn}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 8,
+              border: "1px solid #ddd",
+              background: savingAddr ? "#f3f3f3" : "white",
+              cursor: savingAddr ? "default" : "pointer",
+              fontWeight: 600,
+            }}
+            title="Guardar dirección en carrito (POST /cart/shipping/address)"
+          >
+            {savingAddr ? "Guardando…" : "Guardar dirección"}
+          </button>
+
+          {saveAddrMsg && (
+            <span style={{ color: saveAddrMsg.includes("✅") || saveAddrMsg.toLowerCase().includes("success") ? "green" : "crimson" }}>
+              {saveAddrMsg}
+            </span>
+          )}
+        </div>
+      </form>
+    </section>
+
+    {/* 🔹 NUEVO: Estimá tu envío */}
+    <section className={s.card}
+      style={{
+        margin: "8px 0 12px",
+        border: "1px solid #eee",
+        borderRadius: 12,
+        padding: 12,
+        background: "#fff",
+      }}
+    >
+      <h3 style={{ margin: 0, fontSize: 16, marginBottom: 8 }}>Estimá tu envío</h3>
+
+      <form onSubmit={handleCalculateShipping} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <input
+          className={s.input}
+          placeholder="addressId (ej: addr_001)"
+          value={addressId}
+          onChange={(e) => setAddressId(e.target.value)}
+          style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", width: 200 }}
+        />
+        <button
+          type="submit"
+          disabled={shipCalcLoading || items.length === 0}
+          className={s.btn}
+          style={{
+            padding: "8px 12px",
+            borderRadius: 8,
+            border: "1px solid #ddd",
+            background: shipCalcLoading ? "#f3f3f3" : "white",
+            cursor: shipCalcLoading ? "default" : "pointer",
+            fontWeight: 600,
+          }}
+          title="Calcular (POST /shipping/calculate)"
+        >
+          {shipCalcLoading ? "Calculando…" : "Calcular envío"}
+        </button>
+
+        {shipCalcErr && <span style={{ color: "crimson" }}>{shipCalcErr}</span>}
+      </form>
+
+      {shipOptions && (
+        <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
+          {shipOptions.length === 0 && <div style={{ color: "#666" }}>No hay opciones disponibles para la dirección indicada.</div>}
+          {shipOptions.map((opt, i) => (
+            <div key={i} style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+              <strong>{opt.name}</strong>
+              <span>• {opt.description || opt.service}</span>
+              <span>• ETA: {opt.estimatedDays} días</span>
+              <span>• {opt.carrier ?? "Carrier"}</span>
+              <span style={{ marginLeft: "auto" }}>{currency(opt.cost)}</span>
+            </div>
           ))}
         </div>
       )}
+    </section>
 
-   {/* Resumen de totales */}
-{!loading && !err && items.length > 0 && (
-  <section
-    style={{
-      marginTop: 16,
-      padding: 16,
-      border: "1px solid #eee",
-      borderRadius: 12,
-      background: "#fff",
-    }}
-  >
-    <h2 style={{ fontSize: 18, marginTop: 0, marginBottom: 8 }}>
-      Resumen {couponCode ? `(cupón: ${couponCode})` : ""}
-    </h2>
+    {/* Lista de ítems */}
+    {!loading && items.length > 0 && (
+      <div className={s.items} style={{ display: "grid", gap: 12 }}>
+        {items.map((it) => (
+          <article
+            key={it._id}
+            className={s.item}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr auto",
+              gap: 8,
+              padding: 12,
+              border: "1px solid #eee",
+              borderRadius: 12,
+              background: "white",
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 600 }}>
+                {it.product?.name ?? "(Producto)"} {it.size ? `• Talle ${it.size}` : ""}{" "}
+                {it.color ? `• Color ${it.color}` : ""}{" "}
+                {typeof it.price === "number" ? `• ${currency(it.price)}` : ""}
+              </div>
+              <div style={{ opacity: 0.8, fontSize: 14 }}>
+                prodId: {it.product?._id ?? "-"} • itemId: {it._id}
+              </div>
 
-    {/* 🔹 PRIORIDAD 1: resultado de /promotions/apply-discounts */}
-    {promoCalc ? (
-      <div style={{ display: "grid", gap: 6 }}>
-        <div><strong>Subtotal:</strong> {currency(promoCalc.originalAmount)}</div>
+              <div className={s.itemControls} style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontSize: 13, opacity: 0.8 }}>Cant.</span>
+                  <input
+                    className={`${s.input} ${s.inputSm}`}
+                    type="number"
+                    min={1}
+                    value={edits[it._id]?.quantity ?? it.quantity}
+                    onChange={(e) =>
+                      setEdits((s) => ({
+                        ...s,
+                        [it._id]: {
+                          quantity: Math.max(1, parseInt(e.target.value || "1", 10)),
+                          size: s[it._id]?.size ?? (it.size ?? ""),
+                        },
+                      }))
+                    }
+                    style={{ width: 80, padding: "6px 8px", borderRadius: 8, border: "1px solid #ddd" }}
+                  />
+                </label>
 
-        {Array.isArray(promoCalc.discounts) && promoCalc.discounts.length > 0 && (
-          <div>
-            <strong>Descuentos (Promos API):</strong>{" "}
-            {promoCalc.discounts.map((d, i) => (
-              <span key={i} style={{ marginRight: 8 }}>
-                {d.description ? `${d.description} ` : d.promotionName} ({d.type})
-                &nbsp;−{currency(d.discountAmount)}
-              </span>
-            ))}
-          </div>
-        )}
+                <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontSize: 13, opacity: 0.8 }}>Talle</span>
+                  <input
+                    className={s.input}
+                    placeholder="(opcional)"
+                    value={edits[it._id]?.size ?? (it.size ?? "")}
+                    onChange={(e) =>
+                      setEdits((s) => ({
+                        ...s,
+                        [it._id]: {
+                          quantity: s[it._id]?.quantity ?? it.quantity,
+                          size: e.target.value,
+                        },
+                      }))
+                    }
+                    style={{ width: 120, padding: "6px 8px", borderRadius: 8, border: "1px solid #ddd" }}
+                  />
+                </label>
 
-        <div><strong>Total descuento:</strong> {currency(promoCalc.totalDiscount)}</div>
-        {/* Mantenemos envío del summary si lo tenés; el apply-discounts no lo calcula */}
-        {summary && typeof summary.shipping === "number" && (
-          <div><strong>Envío:</strong> {currency(summary.shipping)}</div>
-        )}
-        <div><strong>Total a pagar:</strong> {currency(promoCalc.finalAmount + (summary?.shipping || 0))}</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateItem(it._id)}
+                    disabled={updatingId === it._id}
+                    className={s.btn}
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: 8,
+                      border: "1px solid #ddd",
+                      background: updatingId === it._id ? "#f3f3f3" : "white",
+                      cursor: updatingId === it._id ? "default" : "pointer",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {updatingId === it._id ? "Actualizando…" : "Actualizar"}
+                  </button>
 
-        {promoCalcErr && <div style={{ color: "crimson" }}>{promoCalcErr}</div>}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveItem(it._id)}
+                    disabled={removingId === it._id}
+                    className={s.btnDanger}
+                    style={{
+                      padding: "8px 12px",
+                      border: "1px solid #f1c0c0",
+                      background: removingId === it._id ? "#f8eaea" : "white",
+                      color: "#b00020",
+                      cursor: removingId === it._id ? "default" : "pointer",
+                      fontWeight: 600,
+                      borderRadius: 8,
+                    }}
+                    title="Eliminar ítem del carrito"
+                  >
+                    {removingId === it._id ? "Eliminando…" : "Eliminar"}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ textAlign: "right", fontWeight: 600 }}>
+              x{it.quantity}
+              {typeof it.subtotal === "number" && (
+                <div style={{ fontWeight: 400, opacity: 0.75 }}>{currency(it.subtotal)}</div>
+              )}
+            </div>
+          </article>
+        ))}
       </div>
-    ) : summary ? (
-      /* 🔹 PRIORIDAD 2: tu summary de /cart/summary-with-discounts */
-      <div style={{ display: "grid", gap: 6 }}>
-        <div><strong>Subtotal:</strong> {currency(summary.subtotal)}</div>
+    )}
 
-        {Array.isArray(summary.discounts) && summary.discounts.length > 0 && (
+    {withShip && (
+      <section className={s.card}
+        style={{
+          margin: "8px 0 12px",
+          border: "1px solid #eee",
+          borderRadius: 12,
+          padding: 12,
+          background: "#fff",
+        }}
+      >
+        <h3 style={{ margin: 0, fontSize: 16, marginBottom: 8 }}>Resumen + Envío</h3>
+
+        <div style={{ display: "grid", gap: 6 }}>
+          <div><strong>Moneda:</strong> {withShip.summary.currency || "ARS"}</div>
+          <div><strong>Subtotal:</strong> {money(withShip.summary.subtotal, withShip.summary.currency)}</div>
+          {typeof withShip.summary.estimatedTax === "number" && (
+            <div><strong>Impuestos estimados:</strong> {money(withShip.summary.estimatedTax, withShip.summary.currency)}</div>
+          )}
           <div>
-            <strong>Descuentos:</strong>{" "}
-            {summary.discounts.map((d, i) => (
-              <span key={i} style={{ marginRight: 8 }}>
-                {d.description ? `${d.description} ` : ""}({d.type})
-                &nbsp;−{currency(d.amount)}
-              </span>
-            ))}
+            <strong>Total estimado (sin envío):</strong> {money(withShip.summary.estimatedTotal, withShip.summary.currency)}
+          </div>
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>Tarifas de envío disponibles</div>
+          {withShip.shipping.rates.length === 0 && (
+            <div style={{ color: "#666" }}>No hay tarifas disponibles para la dirección indicada.</div>
+          )}
+          {withShip.shipping.rates.length > 0 && (
+            <div style={{ display: "grid", gap: 8 }}>
+              {withShip.shipping.rates.map((r) => {
+                const checked = selectedRate?.serviceId === r.serviceId && selectedRate?.carrier === r.carrier && selectedRate?.service === r.service;
+                return (
+                  <label key={`${r.carrier}_${r.service}_${r.serviceId}`} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <input
+                      type="radio"
+                      name="ship-rate"
+                      checked={!!checked}
+                      onChange={() => setSelectedRate(r)}
+                    />
+                    <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+                      <strong style={{ textTransform: "capitalize" }}>{r.carrier}</strong>
+                      <span>• {r.service}</span>
+                      {r.days && <span>• {r.days}</span>}
+                      <span style={{ marginLeft: "auto" }}>
+                        {money(r.price, r.currency || withShip.summary.currency)}
+                      </span>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Total combinado (solo si hay misma moneda) */}
+        {selectedRate && (
+          <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px dashed #ddd", display: "grid", gap: 6 }}>
+            {selectedRate.currency && withShip.summary.currency && selectedRate.currency !== withShip.summary.currency ? (
+              <div style={{ color: "#b26b00" }}>
+                <strong>Nota:</strong> el carrito está en <strong>{withShip.summary.currency}</strong> y el envío en{" "}
+                <strong>{selectedRate.currency}</strong>. Mostramos ambos montos por separado.
+              </div>
+            ) : null}
+
+            <div>
+              <strong>Total + Envío:</strong>{" "}
+              {selectedRate.currency && withShip.summary.currency && selectedRate.currency !== withShip.summary.currency
+                ? `${money(withShip.summary.estimatedTotal, withShip.summary.currency)} + ${money(selectedRate.price, selectedRate.currency)}`
+                : money((withShip.summary.estimatedTotal || 0) + (selectedRate.price || 0), withShip.summary.currency)}
+            </div>
           </div>
         )}
+      </section>
+    )}
 
-        <div><strong>Total descuento:</strong> {currency(summary.totalDiscount)}</div>
-        <div><strong>Envío:</strong> {currency(summary.shipping)}</div>
-        <div><strong>Total a pagar:</strong> {currency(summary.finalTotal)}</div>
-
-        {summary.items?.length > 0 && (
+    {/* 🔹 PRIORIDAD 0: resultado crudo de /cart/apply-coupon */}
+    {couponResult ? (
+      /* …TU BLOQUE EXISTENTE DE couponResult SIN CAMBIOS… */
+      <div style={{ display: "grid", gap: 6 }}>
+        {couponResult.data?.cartSummary && (
+          <>
+            <div><strong>Subtotal:</strong> {currency(couponResult.data.cartSummary.subtotal)}</div>
+            {typeof couponResult.data.cartSummary.estimatedTax === "number" && (
+              <div><strong>Impuestos estimados:</strong> {currency(couponResult.data.cartSummary.estimatedTax)}</div>
+            )}
+          </>
+        )}
+        {couponResult.data?.discounts && (
+          <>
+            <div>
+              <strong>Descuentos:</strong> {currency(couponResult.data.discounts.totalDiscount)}
+              {!couponResult.data.discounts.success && Array.isArray(couponResult.data.discounts.errors) && couponResult.data.discounts.errors.length > 0 && (
+                <span style={{ marginLeft: 8, color: "#b00020" }}>
+                  {couponResult.data.discounts.errors[0]}
+                </span>
+              )}
+            </div>
+          </>
+        )}
+        <div>
+          <strong>Total a pagar:</strong> {currency(
+            typeof couponResult.data?.finalTotal === "number"
+              ? couponResult.data.finalTotal
+              : couponResult.data?.cartSummary?.estimatedTotal ?? 0
+          )}
+        </div>
+        {Array.isArray(couponResult.data?.cartSummary?.items) && couponResult.data.cartSummary.items.length > 0 && (
           <div style={{ marginTop: 8 }}>
-            <div style={{ fontWeight: 600, marginBottom: 4 }}>Ítems (con descuentos):</div>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>Ítems:</div>
             <ul style={{ margin: 0, paddingLeft: 18 }}>
-              {summary.items.map((it) => (
+              {couponResult.data.cartSummary.items.map((it) => (
                 <li key={it._id} style={{ marginBottom: 4 }}>
-                  {it.productName} ×{it.quantity} •{" "}
-                  <span style={{ textDecoration: it.discountedPrice < it.originalPrice ? "line-through" : "none", opacity: 0.7 }}>
-                    {currency(it.originalPrice)}
-                  </span>{" "}
-                  {it.discountedPrice < it.originalPrice && (
-                    <strong style={{ marginLeft: 6 }}>{currency(it.discountedPrice)}</strong>
-                  )}
-                  <span style={{ marginLeft: 8, opacity: 0.8 }}>Subtotal: {currency(it.subtotal)}</span>
+                  {it.product?.name ?? "Producto"} ×{it.quantity} • {currency(it.product?.price)}
+                  <span style={{ marginLeft: 8, opacity: 0.8 }}>
+                    Subtotal: {currency(it.itemTotal)}
+                  </span>
                 </li>
               ))}
             </ul>
           </div>
         )}
       </div>
-    ) : (
-      /* 🔹 PRIORIDAD 3: tu fallback original */
-      <div style={{ display: "grid", gap: 4 }}>
-        <div><strong>Items:</strong> {cartTotalItems ?? derivedTotalItems}</div>
-        {typeof cartTotal === "number" && (
-          <div><strong>Total:</strong> {currency(cartTotal)}</div>
+    ) : cartTotalSummary ? (
+      // 🔹 PRIORIDAD 1.5: resultado de GET /cart/total (sin descuentos)
+      <div style={{ display: "grid", gap: 6 }}>
+        <div><strong>Moneda:</strong> {cartTotalSummary.currency || "ARS"}</div>
+
+        <div><strong>Subtotal:</strong> {money(cartTotalSummary.subtotal, cartTotalSummary.currency)}</div>
+
+        {typeof cartTotalSummary.estimatedTax === "number" && (
+          <div><strong>Impuestos estimados:</strong> {money(cartTotalSummary.estimatedTax, cartTotalSummary.currency)}</div>
         )}
-        {!!cartDiscounts?.length && (
-          <div>
-            <strong>Descuentos:</strong>{" "}
-            {cartDiscounts.map((d, i) => (
-              <span key={i} style={{ marginRight: 8 }}>
-                {d.description ? `${d.description} ` : ""}({d.type}) −{currency(d.amount)}
-              </span>
-            ))}
+
+        <div>
+          <strong>Total estimado:</strong> {money(cartTotalSummary.estimatedTotal, cartTotalSummary.currency)}
+        </div>
+
+        {Array.isArray(cartTotalSummary.items) && cartTotalSummary.items.length > 0 && (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>Ítems:</div>
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              {cartTotalSummary.items.map((it) => (
+                <li key={it._id} style={{ marginBottom: 4 }}>
+                  {it.product?.name ?? "Producto"} ×{it.quantity}
+                  {typeof it.product?.price === "number" && <> • {money(it.product.price, cartTotalSummary.currency)}</>}
+                  <span style={{ marginLeft: 8, opacity: 0.8 }}>
+                    Subtotal: {money(it.itemTotal, cartTotalSummary.currency)}
+                  </span>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
-        {typeof cartFinalTotal === "number" && (
-          <div><strong>Total a pagar:</strong> {currency(cartFinalTotal)}</div>
-        )}
       </div>
-    )}
-  </section>
-)}
+    )
+      : summaryV2 ? (
+        /* 🔹 PRIORIDAD 1: NUEVO summary de GET /cart/summary-with-discounts (wrapper) */
+        <div style={{ display: "grid", gap: 6 }}>
+          <div><strong>Moneda:</strong> {summaryV2.cartSummary.currency || "ARS"}</div>
 
-      {/* Checkout (POST /orders) */}
-      {!loading && !err && items.length > 0 && (
-        <section
-          style={{
-            marginTop: 20,
-            padding: 16,
-            border: "1px solid #eee",
-            borderRadius: 12,
-            background: "#fff",
-          }}
-        >
-          <h2 style={{ fontSize: 18, marginTop: 0, marginBottom: 10 }}>Datos de envío</h2>
+          <div><strong>Subtotal:</strong> {money(summaryV2.cartSummary.subtotal, summaryV2.cartSummary.currency)}</div>
 
-          <form onSubmit={handleCreateOrder} style={{ display: "grid", gap: 8 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              <label style={{ display: "grid", gap: 4 }}>
-                <span style={{ fontSize: 13, opacity: 0.8 }}>Calle</span>
-                <input
-                  value={shipStreet}
-                  onChange={(e) => setShipStreet(e.target.value)}
-                  required
-                  placeholder="Calle 123"
-                  style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
-                />
-              </label>
-              <label style={{ display: "grid", gap: 4 }}>
-                <span style={{ fontSize: 13, opacity: 0.8 }}>Ciudad</span>
-                <input
-                  value={shipCity}
-                  onChange={(e) => setShipCity(e.target.value)}
-                  required
-                  placeholder="CDMX"
-                  style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
-                />
-              </label>
-            </div>
+          {typeof summaryV2.cartSummary.estimatedTax === "number" && (
+            <div><strong>Impuestos estimados:</strong> {money(summaryV2.cartSummary.estimatedTax, summaryV2.cartSummary.currency)}</div>
+          )}
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              <label style={{ display: "grid", gap: 4 }}>
-                <span style={{ fontSize: 13, opacity: 0.8 }}>Código Postal</span>
-                <input
-                  value={shipZip}
-                  onChange={(e) => setShipZip(e.target.value)}
-                  required
-                  placeholder="12345"
-                  style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
-                />
-              </label>
-              <label style={{ display: "grid", gap: 4 }}>
-                <span style={{ fontSize: 13, opacity: 0.8 }}>País</span>
-                <input
-                  value={shipCountry}
-                  onChange={(e) => setShipCountry(e.target.value)}
-                  required
-                  placeholder="México"
-                  style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
-                />
-              </label>
-            </div>
+          <div>
+            <strong>Descuentos:</strong> {money(summaryV2.discounts.totalDiscount, summaryV2.cartSummary.currency)}
+          </div>
 
-            <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6, flexWrap: "wrap" }}>
-              <button
-                type="submit"
-                disabled={creatingOrder || !cartId}
-                style={{
-                  padding: "10px 14px",
-                  borderRadius: 10,
-                  border: "1px solid #ddd",
-                  background: creatingOrder ? "#f3f3f3" : "white",
-                  cursor: creatingOrder ? "default" : "pointer",
-                  fontWeight: 700,
-                }}
-                title="Crear pedido (POST /orders)"
-              >
-                {creatingOrder ? "Creando pedido…" : "Confirmar pedido"}
-              </button>
+          {/* Mostramos ambos por claridad */}
+          <div style={{ opacity: 0.85 }}>
+            <strong>Total estimado (Subtotal+Tax):</strong> {money(summaryV2.cartSummary.estimatedTotal, summaryV2.cartSummary.currency)}
+          </div>
 
-              {orderMsg && (
-                <span style={{ color: orderMsg.includes("✅") ? "green" : "crimson" }}>{orderMsg}</span>
-              )}
-            </div>
-          </form>
+          <div>
+            <strong>Total a pagar:</strong> {money(summaryV2.finalTotal, summaryV2.cartSummary.currency)}
+          </div>
 
-          {orderCreated && (
-            <div
-              style={{
-                marginTop: 12,
-                padding: 12,
-                borderRadius: 10,
-                border: "1px solid #e6f4ea",
-                background: "#f3fbf6",
-              }}
-            >
-              <div style={{ fontWeight: 700, marginBottom: 6 }}>Pedido #{orderCreated._id}</div>
-              <div style={{ display: "grid", gap: 4, fontSize: 14 }}>
-                <div><strong>Estado:</strong> {orderCreated.status}</div>
-                <div><strong>Total:</strong> {currency(orderCreated.total)}</div>
-                <div>
-                  <strong>Envío:</strong> {orderCreated.shippingAddress.street}, {orderCreated.shippingAddress.city} ({orderCreated.shippingAddress.zip}), {orderCreated.shippingAddress.country}
-                </div>
-              </div>
-
-              <div style={{ marginTop: 8 }}>
-                <Link href={`/pedidos/${orderCreated._id}`} style={{ textDecoration: "underline" }}>
-                  Ver este pedido
-                </Link>
-              </div>
+          {Array.isArray(summaryV2.cartSummary.items) && summaryV2.cartSummary.items.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>Ítems (con descuentos si aplican):</div>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {summaryV2.cartSummary.items.map((it) => (
+                  <li key={it._id} style={{ marginBottom: 4 }}>
+                    {it.product?.name ?? "Producto"} ×{it.quantity}
+                    {typeof it.product?.price === "number" && <> • {money(it.product.price, summaryV2.cartSummary.currency)}</>}
+                    {typeof it.itemTotal === "number" && (
+                      <span style={{ marginLeft: 8, opacity: 0.8 }}>
+                        Subtotal: {money(it.itemTotal, summaryV2.cartSummary.currency)}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
-        </section>
+        </div>
+      ) : promoCalc ? (
+        /* 🔹 PRIORIDAD 2: resultado de /promotions/apply-discounts */
+        <div style={{ display: "grid", gap: 6 }}>
+          <div><strong>Subtotal:</strong> {currency(promoCalc.originalAmount)}</div>
+          {Array.isArray(promoCalc.discounts) && promoCalc.discounts.length > 0 && (
+            <div>
+              <strong>Descuentos (Promos API):</strong>{" "}
+              {promoCalc.discounts.map((d, i) => (
+                <span key={i} style={{ marginRight: 8 }}>
+                  {d.description ? `${d.description} ` : d.promotionName} ({d.type})
+                  &nbsp;−{currency(d.discountAmount)}
+                </span>
+              ))}
+            </div>
+          )}
+          <div><strong>Total descuento:</strong> {currency(promoCalc.totalDiscount)}</div>
+          {summary && typeof summary.shipping === "number" && (
+            <div><strong>Envío:</strong> {currency(summary.shipping)}</div>
+          )}
+          <div><strong>Total a pagar:</strong> {currency(promoCalc.finalAmount + (summary?.shipping || 0))}</div>
+          {promoCalcErr && <div style={{ color: "crimson" }}>{promoCalcErr}</div>}
+        </div>
+      ) : summary ? (
+        /* 🔹 PRIORIDAD 3: tu summary viejo (shape plano) */
+        <div style={{ display: "grid", gap: 6 }}>
+          <div><strong>Subtotal:</strong> {currency(summary.subtotal)}</div>
+          {Array.isArray(summary.discounts) && summary.discounts.length > 0 && (
+            <div>
+              <strong>Descuentos:</strong>{" "}
+              {summary.discounts.map((d, i) => (
+                <span key={i} style={{ marginRight: 8 }}>
+                  {d.description ? `${d.description} ` : ""}({d.type})
+                  &nbsp;−{currency(d.amount)}
+                </span>
+              ))}
+            </div>
+          )}
+          <div><strong>Total descuento:</strong> {currency(summary.totalDiscount)}</div>
+          <div><strong>Envío:</strong> {currency(summary.shipping)}</div>
+          <div><strong>Total a pagar:</strong> {currency(summary.finalTotal)}</div>
+          {summary.items?.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>Ítems (con descuentos):</div>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {summary.items.map((it) => (
+                  <li key={it._id} style={{ marginBottom: 4 }}>
+                    {it.productName} ×{it.quantity} •{" "}
+                    <span style={{ textDecoration: it.discountedPrice < it.originalPrice ? "line-through" : "none", opacity: 0.7 }}>
+                      {currency(it.originalPrice)}
+                    </span>{" "}
+                    {it.discountedPrice < it.originalPrice && (
+                      <strong style={{ marginLeft: 6 }}>{currency(it.discountedPrice)}</strong>
+                    )}
+                    <span style={{ marginLeft: 8, opacity: 0.8 }}>Subtotal: {currency(it.subtotal)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* 🔹 PRIORIDAD 4: fallback original */
+        <div style={{ display: "grid", gap: 4 }}>
+          <div><strong>Items:</strong> {cartTotalItems ?? derivedTotalItems}</div>
+          {typeof cartTotal === "number" && (
+            <div><strong>Total:</strong> {currency(cartTotal)}</div>
+          )}
+          {!!cartDiscounts?.length && (
+            <div>
+              <strong>Descuentos:</strong>{" "}
+              {cartDiscounts.map((d, i) => (
+                <span key={i} style={{ marginRight: 8 }}>
+                  {d.description ? `${d.description} ` : ""}({d.type}) −{currency(d.amount)}
+                </span>
+              ))}
+            </div>
+          )}
+          {typeof cartFinalTotal === "number" && (
+            <div><strong>Total a pagar:</strong> {currency(cartFinalTotal)}</div>
+          )}
+        </div>
       )}
-    </main>
-  );
+
+    {/* Checkout (POST /orders) */}
+    {!loading && !err && items.length > 0 && (
+      <section className={s.card}
+        style={{
+          marginTop: 20,
+          padding: 16,
+          border: "1px solid #eee",
+          borderRadius: 12,
+          background: "#fff",
+        }}
+      >
+        <h2 style={{ fontSize: 18, marginTop: 0, marginBottom: 10 }}>Datos de envío</h2>
+
+        <form onSubmit={handleCreateOrder} style={{ display: "grid", gap: 8 }}>
+          <div className={s.grid2} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <label style={{ display: "grid", gap: 4 }}>
+              <span style={{ fontSize: 13, opacity: 0.8 }}>Calle</span>
+              <input
+                className={s.input}
+                value={shipStreet}
+                onChange={(e) => setShipStreet(e.target.value)}
+                required
+                placeholder="Calle 123"
+                style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
+              />
+            </label>
+            <label style={{ display: "grid", gap: 4 }}>
+              <span style={{ fontSize: 13, opacity: 0.8 }}>Ciudad</span>
+              <input
+                className={s.input}
+                value={shipCity}
+                onChange={(e) => setShipCity(e.target.value)}
+                required
+                placeholder="CDMX"
+                style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
+              />
+            </label>
+          </div>
+
+          <div className={s.grid2} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <label style={{ display: "grid", gap: 4 }}>
+              <span style={{ fontSize: 13, opacity: 0.8 }}>Código Postal</span>
+              <input
+                className={s.input}
+                value={shipZip}
+                onChange={(e) => setShipZip(e.target.value)}
+                required
+                placeholder="12345"
+                style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
+              />
+            </label>
+            <label style={{ display: "grid", gap: 4 }}>
+              <span style={{ fontSize: 13, opacity: 0.8 }}>País</span>
+              <input
+                className={s.input}
+                value={shipCountry}
+                onChange={(e) => setShipCountry(e.target.value)}
+                required
+                placeholder="México"
+                style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
+              />
+            </label>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6, flexWrap: "wrap" }}>
+            <button
+              type="submit"
+              disabled={creatingOrder || !cartId}
+              className={s.btnPrimary}
+              style={{
+                padding: "10px 14px",
+                borderRadius: 10,
+                border: "1px solid #ddd",
+                background: creatingOrder ? "#f3f3f3" : "white",
+                cursor: creatingOrder ? "default" : "pointer",
+                fontWeight: 700,
+              }}
+              title="Crear pedido (POST /orders)"
+            >
+              {creatingOrder ? "Creando pedido…" : "Confirmar pedido"}
+            </button>
+
+            {orderMsg && (
+              <span style={{ color: orderMsg.includes("✅") ? "green" : "crimson" }}>{orderMsg}</span>
+            )}
+          </div>
+        </form>
+
+        {orderCreated && (
+          <div
+            style={{
+              marginTop: 12,
+              padding: 12,
+              borderRadius: 10,
+              border: "1px solid #e6f4ea",
+              background: "#f3fbf6",
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>Pedido #{orderCreated._id}</div>
+            <div style={{ display: "grid", gap: 4, fontSize: 14 }}>
+              <div><strong>Estado:</strong> {orderCreated.status}</div>
+              <div><strong>Total:</strong> {currency(orderCreated.total)}</div>
+              <div>
+                <strong>Envío:</strong> {orderCreated.shippingAddress.street}, {orderCreated.shippingAddress.city} ({orderCreated.shippingAddress.zip}), {orderCreated.shippingAddress.country}
+              </div>
+            </div>
+
+            <div style={{ marginTop: 8 }}>
+              <Link href={`/pedidos/${orderCreated._id}`} style={{ textDecoration: "underline" }}>
+                Ver este pedido
+              </Link>
+            </div>
+          </div>
+        )}
+      </section>
+    )}
+  </main>
+);
 }

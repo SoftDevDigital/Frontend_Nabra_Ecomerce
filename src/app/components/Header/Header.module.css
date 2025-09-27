@@ -74,3 +74,112 @@
   .brand :global(img){ width:118px; }
   .iconBtn{ width:30px; height:30px; }
 }
+.iconBtnReset {
+  padding: 0 !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Asegura que cualquier trazo del SVG use el color del botón */
+.iconBtn svg { display:block; pointer-events:none; }
+.iconBtn svg *, .iconBtn svg { 
+  stroke: currentColor !important; 
+  fill: none !important; 
+}
+
+/* === lo tuyo arriba sin cambios... === */
+
+/* NUEVO: contenedor acciones izquierda (solo se ve en mobile) */
+.actionsLeft{
+  display:none; /* desktop */
+}
+
+/* MOBILE LAYOUT
+   Tres columnas: [acciones izq] | [logo centrado] | [acciones der] */
+@media (max-width: 860px){
+  .container{
+    grid-template-columns: 1fr auto 1fr; /* izq - centro - der */
+    align-items: center;
+    padding: 10px 12px;
+  }
+  .actionsLeft{
+    display:flex;
+    gap:14px;
+    align-items:center;
+    justify-self:start;
+  }
+  .left{
+    justify-self:center; /* centra la marca */
+  }
+  .brand :global(img){
+    width:136px; /* un toque más chico en mobile */
+  }
+  .actions{
+    justify-self:end;
+    gap:14px;
+  }
+  .nav{ display:none; } /* nav desktop oculto como ya tenías */
+}
+
+/* iPhone SE ajuste fino */
+@media (max-width: 360px){
+  .brand :global(img){ width:122px; }
+  .iconBtn{ width:30px; height:30px; }
+  .actionsLeft{ gap:10px; }
+  .actions{ gap:10px; }
+}
+
+/* ===== Drawer móvil ===== */
+.drawerBackdrop{
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.4);
+  backdrop-filter: blur(2px);
+  z-index: 60;
+  display:flex;
+}
+
+.drawer{
+  width: 78vw; max-width: 320px; height: 100%;
+  background: #fff; border-right: 1px solid #eee;
+  box-shadow: 0 10px 30px rgba(0,0,0,.15);
+  transform: translateX(0);
+  animation: slideIn .16s ease-out;
+}
+
+@keyframes slideIn{ from{ transform: translateX(-10px); opacity:.8; } to{ transform: translateX(0); opacity:1; } }
+
+.drawerHead{
+  display:flex; align-items:center; justify-content:space-between;
+  padding: 12px 12px; border-bottom: 1px solid #eee;
+}
+.closeBtn{
+  border:1px solid #ddd; background:#fff; border-radius:10px; padding:6px 10px; cursor:pointer; font-weight:700;
+}
+.drawerBrand{ display:inline-flex; align-items:center; }
+
+.drawerList{
+  list-style:none; margin:0; padding:8px 10px; display:grid; gap:6px;
+}
+.drawerList a{
+  display:block; padding:10px 12px; border-radius:10px; text-decoration:none; color:#111; font-weight:700;
+}
+.drawerList a:hover{ background:#f7f7f7; }
+.drawerSep{
+  margin:8px 4px 4px; font-size:12px; color:#6b7280; font-weight:700; text-transform:uppercase;
+}
+
+/* Tu fix anterior para el botón (por estilos globales) */
+.iconBtnReset {
+  padding: 0 !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* SVG hereda color */
+.iconBtn svg { display:block; pointer-events:none; }
+.iconBtn svg *, .iconBtn svg { 
+  stroke: currentColor !important; 
+  fill: none !important; 
+}

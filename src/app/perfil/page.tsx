@@ -655,17 +655,20 @@ export default function PerfilPage() {
               <button
                 type="button"
                 className={`${s.btn} ${s.btnGhost}`}
-                onClick={async () => {
-                  try {
-                    await markAllNotificationsRead();
-                    setNqUnread(false);
-                    setNqPage(1);
-                    await loadNotifs();
-                    await loadStats();
-                  } catch (e: any) {
-                    alert(e?.message || "No se pudo marcar todo como leído");
-                  }
-                }}
+               onClick={async () => {
+  try {
+    const r = await markAllNotificationsRead(); // 👈 ahora devuelve { success, markedCount }
+    setNqUnread(false);
+    setNqPage(1);
+    await loadNotifs();
+    await loadStats();
+    if (typeof r?.markedCount === "number") {
+      alert(`Se marcaron ${r.markedCount} notificaciones como leídas ✅`);
+    }
+  } catch (e: any) {
+    alert(e?.message || "No se pudo marcar todo como leído");
+  }
+}}
                 title="Marcar todas como leídas"
               >
                 Marcar todo como leído
@@ -969,24 +972,25 @@ export default function PerfilPage() {
                   className={`${s.btn} ${admSegBusy ? s.btnDisabled : s.btnGhost}`}
                   disabled={admSegBusy}
                   onClick={async ()=>{
-                    setAdmSegMsg(null);
-                    setAdmSegBusy(true);
-                    try {
-                      const criteria = JSON.parse(admSegCriteria || "{}");
-                      await adminSegmentNotifications({
-                        segment: { type: "USER_ATTRIBUTES", criteria },
-                        type: admType,
-                        channel: admChannel,
-                        title: admTitle.trim(),
-                        content: admContent.trim() || undefined,
-                      });
-                      setAdmSegMsg("Segmento enviado ✅");
-                    } catch (e:any) {
-                      setAdmSegMsg(e?.message || "Error en segmento");
-                    } finally {
-                      setAdmSegBusy(false);
-                    }
-                  }}
+  setAdmSegMsg(null);
+  setAdmSegBusy(true);
+  try {
+    const criteria = JSON.parse(admSegCriteria || "{}");
+    const r = await adminSegmentNotifications({
+      segment: { type: "USER_ATTRIBUTES", criteria },
+      type: admType,
+      channel: admChannel,
+      title: admTitle.trim(),
+      content: admContent.trim() || undefined,
+    });
+    // 👇 Ahora r tiene { success, count, notificationIds }
+    setAdmSegMsg(`Segmento enviado ✅ (${r.count} usuarios)`); 
+  } catch (e:any) {
+    setAdmSegMsg(e?.message || "Error en segmento");
+  } finally {
+    setAdmSegBusy(false);
+  }
+}}
                 >
                   {admSegBusy ? "Enviando…" : "Enviar por segmento"}
                 </button>

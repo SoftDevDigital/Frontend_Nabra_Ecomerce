@@ -39,12 +39,7 @@ a:hover{ text-decoration: underline; }
 }
 
 /* Botón base (opcional, usado en CTA del hero) */
-button, .btn{
-  display:inline-flex; align-items:center; justify-content:center;
-  padding: 10px 18px; border-radius: var(--radius);
-  border: 1px solid var(--border); background: #fff; color:#111;
-  cursor:pointer; text-decoration:none; font-weight:700; letter-spacing:.3px;
-}
+
 button:hover, .btn:hover{ background:#f7f7f7; }
 @media (prefers-color-scheme: dark){
   button, .btn{ background:#111; color:#fff; border-color:#2a2a2a; }

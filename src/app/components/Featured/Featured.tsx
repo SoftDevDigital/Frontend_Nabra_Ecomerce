@@ -22,6 +22,14 @@ function mxn(n?: number) {
   return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(n);
 }
 
+/* ✅ NUEVO: helper de moneda configurable (no borro mxn, solo agrego) */
+function formatMoney(n?: number) {
+  if (typeof n !== "number") return "";
+  const currency = process.env.NEXT_PUBLIC_CURRENCY || "ARS";
+  const locale = process.env.NEXT_PUBLIC_LOCALE || "es-AR";
+  return new Intl.NumberFormat(locale, { style: "currency", currency }).format(n);
+}
+
 function getProductImgDirect(p: Product): string | null {
   const candidate =
     p.imageUrl ||
@@ -32,6 +40,15 @@ function getProductImgDirect(p: Product): string | null {
   if (!candidate) return null;
   const abs = /^https?:\/\//i.test(candidate) ? candidate : `${PRODUCTS_API_BASE}/${candidate}`;
   return abs.replace(/([^:]\/)\/+/g, "$1");
+}
+
+/* ✅ NUEVO: heurística para detectar si una URL “parece” imagen */
+function isLikelyImageUrl(u: string) {
+  if (!/^https?:\/\//i.test(u)) return false;
+  if (/\.(png|jpe?g|webp|gif|avif)(\?.*)?$/i.test(u)) return true;
+  // Aceptar CDNs con querys de width/height/format, pero evitar .html
+  if (/[?&](width|height|format|v)=/i.test(u) && !/\.html?($|\?)/i.test(u)) return true;
+  return !/\.html?($|\?)/i.test(u) && !/\.php($|\?)/i.test(u);
 }
 
 export default function Featured() {
@@ -65,13 +82,19 @@ export default function Featured() {
       const entries = await Promise.all(
         list.map(async (p) => {
           const direct = getProductImgDirect(p);
-          if (direct) return [p._id, direct] as const;
+          if (direct && isLikelyImageUrl(direct)) return [p._id, direct] as const;
 
           if (Array.isArray(p.images) && p.images.length) {
+            const first = String(p.images[0] || "");
+            if (first && isLikelyImageUrl(first)) {
+              return [p._id, first] as const;
+            }
             try {
               const urls = await resolveImageUrls(p.images);
-              if (urls[0]) return [p._id, urls[0]] as const;
-            } catch {/* ignore */ }
+              if (urls[0] && isLikelyImageUrl(urls[0])) return [p._id, urls[0]] as const;
+            } catch {
+              /* ignore */
+            }
           }
           return [p._id, "/product-placeholder.jpg"] as const;
         })
@@ -133,7 +156,9 @@ export default function Featured() {
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   return (
     <section className={styles.wrap}>
@@ -169,6 +194,7 @@ export default function Featured() {
             {items.map((p) => {
               const img = thumbs[p._id] || "/product-placeholder.jpg";
               const needsSizeSelection = Array.isArray(p.sizes) && p.sizes.length > 1;
+              const noStock = typeof p.stock === "number" && p.stock <= 0;
               return (
                 <article key={p._id} className={styles.card}>
                   <Link href={`/producto/${p._id}`} className={styles.imgLink} aria-label={p.name}>
@@ -179,7 +205,10 @@ export default function Featured() {
 
                   <div className={styles.cardBody}>
                     <h3 className={styles.title}>{p.name}</h3>
-                    {typeof p.price === "number" && <div className={styles.price}>{mxn(p.price)}</div>}
+                    {/* ✅ usar formato ARS configurable */}
+                    {typeof p.price === "number" && (
+                      <div className={styles.price}>{formatMoney(p.price)}</div>
+                    )}
                     {p.description && (
                       <p className={styles.desc}>
                         {p.description.length > 90 ? `${p.description.slice(0, 90)}…` : p.description}
@@ -198,7 +227,9 @@ export default function Featured() {
                           >
                             <option value="">Elegí un talle</option>
                             {p.sizes!.map((s) => (
-                              <option key={s} value={s}>{s}</option>
+                              <option key={s} value={s}>
+                                {s}
+                              </option>
                             ))}
                           </select>
                         </label>
@@ -223,13 +254,14 @@ export default function Featured() {
                         onClick={() => handleQuickAdd(p)}
                         disabled={
                           addingId === p._id ||
-                          (needsSizeSelection && !(sizeById[p._id] || "").trim())
+                          (needsSizeSelection && !(sizeById[p._id] || "").trim()) ||
+                          noStock
                         }
                         className={styles.cta}
-                        title="Agregar al carrito"
+                        title={noStock ? "Sin stock" : "Agregar al carrito"}
                         style={{ background: "white", border: "1px solid #ddd", color: "#111" }}
                       >
-                        {addingId === p._id ? "Agregando…" : "Agregar"}
+                        {addingId === p._id ? "Agregando…" : noStock ? "Sin stock" : "Agregar"}
                       </button>
                     </div>
 

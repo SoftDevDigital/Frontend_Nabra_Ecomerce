@@ -30,9 +30,14 @@ type OrderNew = {
   status: "pending" | "paid" | "shipped" | "delivered" | "cancelled" | string;
   paymentStatus?: string;
   total: number;
-  subtotal?: number;
-  shippingCost?: number;
-  discountAmount?: number;
+
+  // 🔹 agregados para compat con respuesta vieja
+  currency?: string;        // e.g. "USD"
+  subtotal?: number;        // e.g. 100
+  shippingCost?: number;    // e.g. 0
+  tax?: number;             // e.g. 16
+  discountAmount?: number;  // mapear desde "discount"
+
   items: OrderItemNew[];
   shippingAddress?: ShippingAddressNew;
   trackingNumber?: string;
@@ -40,8 +45,8 @@ type OrderNew = {
   createdAt?: string;
   shippedAt?: string;
   deliveredAt?: string;
-  cancelledAt?: string; // 👈 agregado
-  // ⬇️ agregado: información de envío enriquecida
+  cancelledAt?: string;
+
   shippingInfo?: {
     rateId: string;
     carrier: string;
@@ -55,7 +60,6 @@ type OrderNew = {
     status?: string;
     labelUrl?: string;
   };
-  // ⬆️ agregado
 };
 
 /* ===== Tipos antiguos (para compat) ===== */
@@ -78,9 +82,9 @@ type OrderResponseOld =
   | { success: false; message: string };
 
 /* ===== Helpers ===== */
-function currency(n?: number) {
+function currency(n?: number, code: string = "ARS") {
   return typeof n === "number"
-    ? new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(n)
+    ? new Intl.NumberFormat("es-AR", { style: "currency", currency: code }).format(n)
     : "";
 }
 function formatDT(iso?: string) {
@@ -95,7 +99,7 @@ function formatDT(iso?: string) {
 
 /** Normaliza para que el componente siempre use OrderNew */
 function normalizeOrder(input: any): OrderNew {
-  // Caso nuevo contrato: ya viene "flat" sin wrapper
+  // Caso nuevo contrato (ya viene flat)
   if (
     input &&
     typeof input === "object" &&
@@ -104,15 +108,42 @@ function normalizeOrder(input: any): OrderNew {
   ) {
     return input as OrderNew;
   }
-  // Caso viejo: wrapper {success,data}
+
+  // Caso viejo: wrapper { success, data }
   if (input && typeof input === "object" && "success" in input) {
     if (!(input as any).success) throw new Error((input as any).message || "No se encontró el pedido");
-    const o = (input as any).data as OrderOld;
+    const o = (input as any).data as {
+      _id: string;
+      items: { product?: { _id: string; name: string; price?: number }; quantity: number; size?: string; price: number }[];
+      userId: string;
+      cartId: string;
+      total: number;
+      status: string;
+      shippingAddress: { street?: string; city?: string; zip?: string; country?: string };
+      // 🔹 campos extra del viejo
+      currency?: string;
+      shippingCost?: number;
+      subtotal?: number;
+      tax?: number;
+      discount?: number;
+      createdAt?: string;
+      updatedAt?: string;
+    };
+
     return {
       _id: o._id,
       status: o.status,
       total: o.total,
-      items: o.items.map((it) => ({
+
+      // 🔹 compat
+      currency: o.currency,
+      subtotal: o.subtotal,
+      shippingCost: o.shippingCost,
+      tax: o.tax,
+      discountAmount: o.discount,
+      createdAt: o.createdAt,
+
+      items: (o.items || []).map((it) => ({
         productId: it.product?._id,
         productName: it.product?.name ?? "(Producto)",
         quantity: it.quantity,
@@ -122,13 +153,15 @@ function normalizeOrder(input: any): OrderNew {
       shippingAddress: {
         street: o.shippingAddress?.street,
         city: o.shippingAddress?.city,
-        zipCode: o.shippingAddress?.zip,
+        zipCode: o.shippingAddress?.zip,   // 👈 zip → zipCode
         country: o.shippingAddress?.country,
       },
-    } as OrderNew;
+    };
   }
+
   throw new Error("Formato de respuesta inesperado");
 }
+
 
 export default function OrderDetailPage({ params }: { params: { id: string } }) {
   const orderId = params.id;
@@ -260,27 +293,36 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
   // 👆 agregado
 
   /* ===== Carga GET /orders/:id (nuevo contrato) ===== */
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      setErr(null);
-      try {
-        const r = await apiFetch<OrderNew | OrderResponseOld>(`/orders/${orderId}`, { method: "GET" });
-        const norm = normalizeOrder(r);
-        setOrder(norm);
-      } catch (e: any) {
-        const msg = e?.message || "No se encontró un pedido con ese ID";
-        setErr(msg);
-        const m = msg; // 👈 agregado para no romper la línea siguiente
-        if (msg.toLowerCase().includes("no autenticado") || m.toLowerCase().includes("credenciales")) {
-          window.location.href = `/auth?redirectTo=/pedidos/${orderId}`;
-        }
-      } finally {
-        setLoading(false);
+ useEffect(() => {
+  async function load() {
+    setLoading(true);
+    setErr(null);
+    try {
+      // 1) Intentar detalle del pedido del usuario autenticado
+      let r = await apiFetch<OrderNew | OrderResponseOld>(`/orders/my-orders/${orderId}`, { method: "GET" });
+
+      // 2) Si no vino objeto Order directo ni {success:true,data}, hacer fallback al endpoint general
+      const isWrapperOk = !!r && typeof r === "object" && "success" in (r as any) && (r as any).success === true;
+      const isPlainOrder = !!r && typeof r === "object" && Array.isArray((r as any).items);
+
+      if (!isWrapperOk && !isPlainOrder) {
+        r = await apiFetch<OrderNew | OrderResponseOld>(`/orders/${orderId}`, { method: "GET" });
       }
+
+      const norm = normalizeOrder(r);
+      setOrder(norm);
+    } catch (e: any) {
+      const msg = e?.message || "No se encontró un pedido con ese ID";
+      setErr(msg);
+      if (/(401|no autenticado|unauthorized|credenciales)/i.test(msg)) {
+        window.location.href = `/auth?redirectTo=/pedidos/${orderId}`;
+      }
+    } finally {
+      setLoading(false);
     }
-    load();
-  }, [orderId]);
+  }
+  load();
+}, [orderId]);
 
   // 👇 agregado: auto-consultar shipping-status si hay shipment/tracking
   useEffect(() => {
@@ -322,16 +364,25 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
             </div>
 
             <div>
-              <strong>Estado:</strong> {order.status}
-              {order.paymentStatus ? <> &nbsp;•&nbsp; <strong>Pago:</strong> {order.paymentStatus}</> : null}
-              &nbsp;•&nbsp; <strong>Total:</strong> {currency(order.total)}
-            </div>
+  <strong>Estado:</strong> {order.status}
+  {order.paymentStatus ? <> &nbsp;•&nbsp; <strong>Pago:</strong> {order.paymentStatus}</> : null}
+  &nbsp;•&nbsp; <strong>Total:</strong> {currency(order.total, order.currency || "ARS")}
+</div>
 
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 14 }}>
-              {typeof order.subtotal === "number" && <span>Subtotal: {currency(order.subtotal)}</span>}
-              {typeof order.discountAmount === "number" && <span>Descuento: −{currency(order.discountAmount)}</span>}
-              {typeof order.shippingCost === "number" && <span>Envío: {currency(order.shippingCost)}</span>}
-            </div>
+<div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 14 }}>
+  {typeof order.subtotal === "number" && (
+    <span>Subtotal: {currency(order.subtotal, order.currency || "ARS")}</span>
+  )}
+  {typeof order.discountAmount === "number" && (
+    <span>Descuento: −{currency(order.discountAmount, order.currency || "ARS")}</span>
+  )}
+  {typeof order.shippingCost === "number" && (
+    <span>Envío: {currency(order.shippingCost, order.currency || "ARS")}</span>
+  )}
+  {typeof order.tax === "number" && (
+    <span>Impuestos: {currency(order.tax, order.currency || "ARS")}</span>
+  )}
+</div>
 
             <div style={{ color: "#666", fontSize: 14 }}>
               {order.createdAt && <>Creado: {formatDT(order.createdAt)}</>}
@@ -359,25 +410,33 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
             )}
 
             {/* ⬇️ agregado: bloque con shippingInfo detallado */}
-            {order.shippingInfo && (
-              <div style={{ marginTop: 4 }}>
-                <strong>Envío (carrier):</strong> {order.shippingInfo.carrier} – {order.shippingInfo.service}
-                {" • "}
-                <strong>Costo:</strong> {currency(order.shippingInfo.price)}
-                {" • "}
-                {order.shippingInfo.days && <span>{order.shippingInfo.days} • </span>}
-                {order.shippingInfo.trackingNumber && (
-                  <span>
-                    <strong>Tracking:</strong> {order.shippingInfo.trackingNumber} •{" "}
-                  </span>
-                )}
-                {order.shippingInfo.labelUrl && (
-                  <a href={order.shippingInfo.labelUrl} target="_blank" style={{ textDecoration: "underline" }}>
-                    Descargar etiqueta
-                  </a>
-                )}
-              </div>
-            )}
+           {order.shippingInfo && (
+  <div style={{ marginTop: 4 }}>
+    <strong>Envío (carrier):</strong> {order.shippingInfo.carrier} – {order.shippingInfo.service}
+    {" • "}
+    <strong>Costo:</strong>{" "}
+    {currency(
+      order.shippingInfo.price,
+      order.shippingInfo.currency || order.currency || "ARS"
+    )}
+    {" • "}
+    {order.shippingInfo.days && <span>{order.shippingInfo.days} • </span>}
+    {order.shippingInfo.trackingNumber && (
+      <span>
+        <strong>Tracking:</strong> {order.shippingInfo.trackingNumber} •{" "}
+      </span>
+    )}
+    {order.shippingInfo.labelUrl && (
+      <a
+        href={order.shippingInfo.labelUrl}
+        target="_blank"
+        style={{ textDecoration: "underline" }}
+      >
+        Descargar etiqueta
+      </a>
+    )}
+  </div>
+)}
             {/* ⬆️ agregado */}
 
             {/* ⬇️ agregado: UI de estado de envío (shipping-status) */}

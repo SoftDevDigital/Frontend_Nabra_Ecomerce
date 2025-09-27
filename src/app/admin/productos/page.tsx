@@ -1,51 +1,54 @@
+// src/app/admin/products/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
-import { resolveImageUrls } from "@/lib/resolveImageUrls";
-import s from "./NuevoProducto.module.css";
 
-type ProductIn = {
-  name: string;
-  description: string;
-  price: number;
-  category: string;
-  sizes: string[];
-  images?: string[];
-  stock: number;
-  isPreorder?: boolean;
-  isFeatured?: boolean;
-  specifications?: {
-    brand?: string;
-    model?: string;
-    color?: string;
-    [k: string]: any;
-  };
-};
-
-type ProductOut = {
+type Product = {
   _id: string;
   name: string;
   description: string;
   price: number;
   category: string;
   sizes: string[];
-  images?: string[];
+  images?: string[]; // puede venir vacío
   stock: number;
   isPreorder: boolean;
   isFeatured: boolean;
   isActive?: boolean;
   createdAt?: string;
+  updatedAt?: string;
   [k: string]: any;
 };
 
-type CreateResponse =
-  | { success: true; data: ProductOut; message?: string }
-  | { success: false; message: string }
-  | ProductOut;
+type ProductsResponse =
+  | { success: true; data: { products: Product[]; total: number; limit: number; offset: number }; message?: string }
+  | { success: true; data: Product[]; message?: string } // ⬅️ para /admin/products/low-stock
+  // ✅ NUEVO: por si alguna ruta (o bug) devuelve un único producto plano en data
+  | { success: true; data: Product; message?: string }
+  | { success: false; message: string };
 
-/* ===== Helpers para detectar admin desde el JWT (gateo UI) ===== */
+/* ⬇️⬇️ NUEVO: tipos para promociones (según /admin/promotions) */
+type Promotion = {
+  _id: string;
+  name?: string;
+  description?: string;
+  type?: string;               // porcentaje, fijo, etc. (opcional por si tu backend lo usa)
+  discountPercent?: number;    // opcional
+  discountAmount?: number;     // opcional
+  startDate?: string;          // ISO
+  endDate?: string;            // ISO
+  active?: boolean;
+  products?: string[] | Product[]; // ids o productos, depende del backend
+  [k: string]: any;
+};
+type PromotionsResponse =
+  | { success: true; data: { promotions: Promotion[]; total: number; limit: number; offset: number }; message?: string }
+  | { success: false; message: string };
+/* ⬆️⬆️ FIN tipos promociones */
+
+/* ========= Helpers: detectar admin desde el JWT (mismo patrón que ya usás) ========== */
 function getJwtPayload(): any | null {
   try {
     const t = typeof window !== "undefined" ? localStorage.getItem("nabra_token") : null;
@@ -66,427 +69,573 @@ function isAdminFromToken(): boolean {
   if (typeof role === "string") return role.toLowerCase() === "admin";
   return false;
 }
-function getBearer(): string | null {
+
+/* ========= Utils UI ========= */
+// ✅ CAMBIO: base por defecto al puerto 3001 (tu API)
+const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3001";
+
+// ✅ NUEVO: heurística simple para filtrar URLs que no son imagen
+function isLikelyImageUrl(u?: string) {
+  if (!u) return false;
+  if (!/^https?:\/\//i.test(u)) return true; // podría ser relativo a back de medios
+  if (/\.(png|jpe?g|webp|gif|avif)(\?.*)?$/i.test(u)) return true;
+  if (/[?&](width|height|format|v)=/i.test(u) && !/\.html?($|\?)/i.test(u)) return true;
+  return !/\.html?($|\?)/i.test(u) && !/\.php($|\?)/i.test(u);
+}
+
+function absImageUrl(u?: string): string | null {
+  if (!u) return null;
+  if (/^https?:\/\//i.test(u)) return isLikelyImageUrl(u) ? u : null;
+  // si viene un path/ID relativo, lo resolvemos contra el API base
+  const built = `${BASE}/${u}`.replace(/([^:]\/)\/+/g, "$1");
+  return isLikelyImageUrl(built) ? built : null;
+}
+
+// ✅ CAMBIO: moneda y locale alineados a ARS
+function fmtMoney(n: number, currency = (process.env.NEXT_PUBLIC_CURRENCY || "ARS")) {
   try {
-    return typeof window !== "undefined" ? localStorage.getItem("nabra_token") : null;
+    const locale = process.env.NEXT_PUBLIC_LOCALE || "es-AR";
+    return new Intl.NumberFormat(locale, { style: "currency", currency }).format(n);
   } catch {
-    return null;
+    return `${currency} ${n}`;
   }
 }
-/* ======================= PROMOS: Types ======================== */
-type PromotionType = { id: string; name: string; description: string };
-/* =============================================================== */
+function fmtDate(iso?: string) {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    return new Intl.DateTimeFormat("es-AR", { dateStyle: "medium", timeStyle: "short" }).format(d);
+  } catch { return iso; }
+}
 
-export default function AdminCreateProductPage() {
+type Mode = "all" | "low" | "promos"; // ⬅️ AMPLIADO
+
+export default function AdminProductsPage() {
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // Form state
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [price, setPrice] = useState<number | "">("");
-  const [category, setCategory] = useState("");
-  const [sizesText, setSizesText] = useState("");          // CSV -> array
-  const [imagesText, setImagesText] = useState("");        // CSV opcional -> array
-  const [stock, setStock] = useState<number | "">("");
-  const [isPreorder, setIsPreorder] = useState(false);
-  const [isFeatured, setIsFeatured] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [total, setTotal] = useState(0);
+  const [limit, setLimit] = useState(20);   // default alineado al backend
+  const [offset, setOffset] = useState(0);
 
-  // 🔹 NUEVO: specifications (según contrato)
-  const [specBrand, setSpecBrand] = useState("");
-  const [specModel, setSpecModel] = useState("");
-  const [specColor, setSpecColor] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
 
-  // UI state
-  const [creating, setCreating] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [created, setCreated] = useState<ProductOut | null>(null);
-  const [createdImgs, setCreatedImgs] = useState<string[]>([]);
+  // ⬇️ NUEVO: modo y pool para low-stock
+  const [mode, setMode] = useState<Mode>("all");
+  const [lowPool, setLowPool] = useState<Product[]>([]);
 
-  // 🔹 NUEVO: tipos de promociones (GET /promotions/types)
-  const [promoTypes, setPromoTypes] = useState<PromotionType[]>([]);
-  const [promoTypesLoading, setPromoTypesLoading] = useState(false);
-  const [promoTypesErr, setPromoTypesErr] = useState<string | null>(null);
+  // ⬇️⬇️ NUEVO: estado para promociones
+  const [promos, setPromos] = useState<Promotion[]>([]);
+  // usamos los mismos total/limit/offset para la paginación visual; sólo cambiamos su fuente según el modo
+  /* ⬆️⬆️ FIN promos */
 
   useEffect(() => {
     setIsAdmin(isAdminFromToken());
   }, []);
 
-  useEffect(() => {
-    // Cargar tipos de promociones (público)
-    let abort = false;
-    (async () => {
-      setPromoTypesLoading(true);
-      setPromoTypesErr(null);
-      try {
-        const r = await apiFetch<{ types: PromotionType[] }>("/promotions/types", { method: "GET" });
-        if (!abort) setPromoTypes(r.types || []);
-      } catch (e: any) {
-        if (!abort) setPromoTypesErr(e?.message || "No se pudieron cargar los tipos de promoción");
-      } finally {
-        if (!abort) setPromoTypesLoading(false);
-      }
-    })();
-    return () => { abort = true; };
-  }, []);
-
-  function parseCsvToArray(input: string): string[] {
-    return (input || "")
-      .split(/[,\n]/g)
-      .map((s) => s.trim())
-      .filter(Boolean);
+  // ✅ NUEVO: parser tolerante para distintas formas del payload
+  function coerceAdminProductsPayload(r: ProductsResponse, fallbackLimit: number, fallbackOffset: number) {
+    const data: any = (r as any).data;
+    if (Array.isArray(data)) {
+      return { products: data as Product[], total: data.length, limit: fallbackLimit, offset: fallbackOffset };
+    }
+    if (data && Array.isArray(data.products)) {
+      const { products, total, limit, offset } = data;
+      return {
+        products: products as Product[],
+        total: typeof total === "number" ? total : (products?.length ?? 0),
+        limit: typeof limit === "number" ? limit : fallbackLimit,
+        offset: typeof offset === "number" ? offset : fallbackOffset,
+      };
+    }
+    // caso extraño: vino un solo producto plano en data
+    if (data && typeof data === "object" && data._id && data.name) {
+      return { products: [data as Product], total: 1, limit: fallbackLimit, offset: fallbackOffset };
+    }
+    // fallback
+    return { products: [] as Product[], total: 0, limit: fallbackLimit, offset: fallbackOffset };
   }
 
-  function formatDate(iso?: string) {
-    if (!iso) return "";
+  async function loadProducts(nextOffset = offset, nextLimit = limit) {
+    if (!isAdmin) return;
+    setLoading(true);
+    setErr(null);
     try {
-      const d = new Date(iso);
-      return new Intl.DateTimeFormat("es-AR", { dateStyle: "medium", timeStyle: "short" }).format(d);
-    } catch {
-      return iso || "";
-    }
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setMsg(null);
-    setCreated(null);
-    setCreatedImgs([]);
-
-    // Validaciones mínimas
-    const p = Number(price);
-    const sN = Number(stock);
-    if (!name.trim() || !description.trim() || !category.trim()) {
-      setMsg("Completá nombre, descripción y categoría.");
-      return;
-    }
-    if (!Number.isFinite(p) || p <= 0) {
-      setMsg("Precio inválido.");
-      return;
-    }
-    if (!Number.isFinite(sN) || sN < 0) {
-      setMsg("Stock inválido.");
-      return;
-    }
-    const sizes = parseCsvToArray(sizesText);
-    if (!sizes.length) {
-      setMsg("Ingresá al menos un talle en “sizes”.");
-      return;
-    }
-    const images = parseCsvToArray(imagesText);
-
-    // 🔹 NUEVO: armar specifications sólo si hay datos
-    const specifications: ProductIn["specifications"] | undefined =
-      specBrand || specModel || specColor
-        ? {
-            ...(specBrand ? { brand: specBrand.trim() } : {}),
-            ...(specModel ? { model: specModel.trim() } : {}),
-            ...(specColor ? { color: specColor.trim() } : {}),
-          }
-        : undefined;
-
-    const body: ProductIn = {
-      name: name.trim(),
-      description: description.trim(),
-      price: p,
-      category: category.trim(),
-      sizes,
-      stock: sN,
-      ...(images.length ? { images } : {}),
-      ...(isPreorder ? { isPreorder: true } : {}),
-      ...(isFeatured ? { isFeatured: true } : {}),
-      ...(specifications ? { specifications } : {}),
-    };
-
-    setCreating(true);
-    try {
-      const bearer = getBearer();
-      const r = await apiFetch<CreateResponse>("/products", {
-        method: "POST",
-        // 🔹 Headers para JSON + Auth (por si apiFetch no los agrega)
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
-        },
-        body: JSON.stringify(body),
+      const r = await apiFetch<ProductsResponse>(`/admin/products?limit=${nextLimit}&offset=${nextOffset}`, {
+        method: "GET",
       });
-
-      // Soportar:
-      // - { success: true, data: {...} }
-      // - objeto plano con _id (201)
-      // - { success: false, message: "..." }
-      let createdData: ProductOut | null = null;
-      if (typeof (r as any)?.success === "boolean") {
-        const rr = r as Exclude<CreateResponse, ProductOut>;
-        if (!rr.success) throw new Error(rr.message || "No se pudo crear el producto");
-        createdData = rr.data;
-      } else {
-        const plain = r as ProductOut;
-        if (plain && plain._id) {
-          createdData = plain;
-        } else {
-          throw new Error("Respuesta inesperada del servidor");
-        }
+      if (!("success" in r) || !r.success) {
+        throw new Error(("message" in r && r.message) || "No se pudieron obtener los productos");
       }
 
-      setCreated(createdData);
-      setMsg("Producto creado ✅");
-
-      try {
-        const urls = await resolveImageUrls(createdData.images ?? []);
-        setCreatedImgs(urls);
-      } catch {
-        // sin romper la UI
-      }
-
-      // limpiar formulario (mantengo flags y specs)
-      setName("");
-      setDescription("");
-      setPrice("");
-      setCategory("");
-      setSizesText("");
-      setImagesText("");
-      setStock("");
-    } catch (err: any) {
-      const m = String(err?.message || "No se pudo crear el producto");
-      setMsg(m);
-      // redirigir en 401/403 si el backend devuelve ese texto
-      if (/(401|403|no autenticado|credenciales|unauthorized|forbidden)/i.test(m)) {
-        window.location.href = "/auth?redirectTo=/admin/productos/nuevo";
+      const coerced = coerceAdminProductsPayload(r, nextLimit, nextOffset);
+      setProducts(coerced.products ?? []);
+      setTotal(coerced.total ?? 0);
+      setLimit(coerced.limit ?? nextLimit);
+      setOffset(coerced.offset ?? nextOffset);
+    } catch (e: any) {
+      const m = e?.message || "No se pudieron obtener los productos";
+      setErr(m);
+      if (/(no autenticado|credenciales|401|unauthorized)/i.test(m)) {
+        window.location.href = "/auth?redirectTo=/admin/products";
       }
     } finally {
-      setCreating(false);
+      setLoading(false);
+    }
+  }
+
+  // ⬇️ NUEVO: loader para low-stock (sin paginación de backend)
+  async function loadLowStock() {
+    if (!isAdmin) return;
+    setLoading(true);
+    setErr(null);
+    try {
+      const r = await apiFetch<ProductsResponse>(`/admin/products/low-stock`, { method: "GET" });
+      if (!("success" in r) || !r.success) {
+        throw new Error(("message" in r && r.message) || "No se pudo obtener el stock bajo");
+      }
+      const data: any = (r as any).data;
+      const arr: Product[] = Array.isArray(data)
+        ? data
+        : (Array.isArray(data?.products) ? data.products : (data && data._id ? [data] : []));
+      setLowPool(arr);
+      setTotal(arr.length);
+      setOffset(0);
+      setProducts(arr.slice(0, limit)); // primera "página" client-side
+    } catch (e: any) {
+      const m = e?.message || "No se pudo obtener el stock bajo";
+      setErr(m);
+      if (/(no autenticado|credenciales|401|unauthorized)/i.test(m)) {
+        window.location.href = "/auth?redirectTo=/admin/products";
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /* ⬇️⬇️ NUEVO: loader para /admin/promotions con paginación del backend */
+  async function loadPromotions(nextOffset = 0, nextLimit = limit) {
+    if (!isAdmin) return;
+    setLoading(true);
+    setErr(null);
+    try {
+      const r = await apiFetch<PromotionsResponse>(`/admin/promotions?limit=${nextLimit}&offset=${nextOffset}`, {
+        method: "GET",
+      });
+      if (!("success" in r) || !r.success) {
+        throw new Error(("message" in r && r.message) || "No se pudieron obtener las promociones");
+      }
+      const { promotions, total, limit: l, offset: o } = r.data;
+      setPromos(promotions ?? []);
+      setTotal(total ?? 0);
+      setLimit(l ?? nextLimit);
+      setOffset(o ?? nextOffset);
+    } catch (e: any) {
+      const m = e?.message || "No se pudieron obtener las promociones";
+      setErr(m);
+      if (/(no autenticado|credenciales|401|unauthorized)/i.test(m)) {
+        window.location.href = "/auth?redirectTo=/admin/products";
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+  /* ⬆️⬆️ FIN promos */
+
+  useEffect(() => {
+    if (isAdmin) {
+      // carga inicial según modo
+      if (mode === "all") {
+        loadProducts(0, limit);
+      } else if (mode === "low") {
+        loadLowStock();
+      } else {
+        loadPromotions(0, limit);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, mode]);
+
+  // ⬇️ NUEVO: cuando estamos en modo "low", la paginación es client-side (slice al pool)
+  useEffect(() => {
+    if (mode === "low") {
+      setProducts(lowPool.slice(offset, offset + limit));
+    }
+  }, [mode, lowPool, offset, limit]);
+
+  const page = useMemo(() => Math.floor(offset / Math.max(1, limit)) + 1, [offset, limit]);
+  const pageCount = useMemo(() => Math.max(1, Math.ceil(total / Math.max(1, limit))), [total, limit]);
+
+  function goPrev() {
+    if (mode === "all") {
+      const next = Math.max(0, offset - limit);
+      if (next !== offset) loadProducts(next, limit);
+    } else if (mode === "low") {
+      const next = Math.max(0, offset - limit);
+      setOffset(next);
+    } else {
+      const next = Math.max(0, offset - limit);
+      if (next !== offset) loadPromotions(next, limit);
+    }
+  }
+  function goNext() {
+    if (mode === "all") {
+      const next = offset + limit;
+      if (next < total) loadProducts(next, limit);
+    } else if (mode === "low") {
+      const next = offset + limit;
+      if (next < total) setOffset(next);
+    } else {
+      const next = offset + limit;
+      if (next < total) loadPromotions(next, limit);
+    }
+  }
+  function changeLimit(newLimit: number) {
+    const l = Number.isFinite(newLimit) && newLimit > 0 ? newLimit : 20;
+    if (mode === "all") {
+      // resetear a primera página contra backend
+      loadProducts(0, l);
+    } else if (mode === "low") {
+      // client-side
+      setLimit(l);
+      setOffset(0);
+    } else {
+      loadPromotions(0, l);
     }
   }
 
   return (
-    <main className={s.page}>
-      <div className={s.container}>
-        <header className={s.headerRow}>
-          <h1 className={s.h1}>Crear producto</h1>
-          <Link href="/" className={s.backLink}>Volver al inicio</Link>
-        </header>
+    <main style={{ maxWidth: 1200, margin: "24px auto", padding: "0 16px" }}>
+      <header style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Productos (admin)</h1>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+          <Link href="/admin/dashboard" style={{ opacity: 0.8 }}>Dashboard</Link>
+          <Link href="/admin/pedidos" style={{ opacity: 0.8 }}>Pedidos</Link>
+          <Link href="/admin/media" style={{ opacity: 0.8 }}>Medios</Link>
+        </div>
+      </header>
 
-        {!isAdmin && (
-          <div className={s.guard}>
-            <p className={s.p0}>Para crear productos necesitás permisos de administrador.</p>
-          </div>
-        )}
+      {!isAdmin && (
+        <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 16, background: "#fff" }}>
+          <p style={{ margin: 0 }}>Necesitás permisos de administrador.</p>
+        </div>
+      )}
 
-        {isAdmin && (
-          <form onSubmit={handleSubmit} className={s.card}>
-            <div className={s.row2}>
-              <label className={s.label}>
-                <span>Nombre *</span>
-                <input
-                  className={s.input}
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                  placeholder="Wireless Headphones"
-                />
-              </label>
+      {isAdmin && (
+        <>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
+            <button
+              type="button"
+              onClick={() => (mode === "all" ? loadProducts(offset, limit) : mode === "low" ? loadLowStock() : loadPromotions(offset, limit))}
+              style={{
+                padding: "8px 12px",
+                borderRadius: 8,
+                border: "1px solid #ddd",
+                background: "white",
+                cursor: "pointer",
+                fontWeight: 600,
+              }}
+            >
+              Actualizar
+            </button>
 
-              <label className={s.label}>
-                <span>Categoría *</span>
-                <input
-                  className={s.input}
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  required
-                  placeholder="Electronics"
-                />
-              </label>
-            </div>
-
-            <label className={s.label}>
-              <span>Descripción *</span>
-              <textarea
-                className={s.textarea}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                required
-                rows={4}
-                placeholder="High-quality wireless headphones with noise cancellation"
-              />
-            </label>
-
-            <div className={s.row3}>
-              <label className={s.label}>
-                <span>Precio *</span>
-                <input
-                  className={s.input}
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value === "" ? "" : Number(e.target.value))}
-                  required
-                  placeholder="1999.99"
-                />
-              </label>
-
-              <label className={s.label}>
-                <span>Stock *</span>
-                <input
-                  className={s.input}
-                  type="number"
-                  min={0}
-                  value={stock}
-                  onChange={(e) => setStock(e.target.value === "" ? "" : Number(e.target.value))}
-                  required
-                  placeholder="50"
-                />
-              </label>
-
-              <label className={s.label}>
-                <span>Talles (CSV) *</span>
-                <input
-                  className={s.input}
-                  value={sizesText}
-                  onChange={(e) => setSizesText(e.target.value)}
-                  required
-                  placeholder="35,36,37,38"
-                />
-              </label>
-            </div>
-
-            <label className={s.label}>
-              <span>Imágenes (CSV, opcional)</span>
-              <input
-                className={s.input}
-                value={imagesText}
-                onChange={(e) => setImagesText(e.target.value)}
-                placeholder="https://example.com/image1.jpg, https://example.com/image2.jpg"
-              />
-              <small className={s.hint}>
-                Acepta IDs de media o URLs completas. Dejar vacío si no aplica.
-              </small>
-            </label>
-
-            {/* 🔹 NUEVO: specifications */}
-            <fieldset className={s.fieldset}>
-              <legend className={s.legend}>Specifications (opcional)</legend>
-              <div className={s.row3}>
-                <label className={s.label}>
-                  <span>Brand</span>
-                  <input
-                    className={s.input}
-                    value={specBrand}
-                    onChange={(e) => setSpecBrand(e.target.value)}
-                    placeholder="TechBrand"
-                  />
-                </label>
-                <label className={s.label}>
-                  <span>Model</span>
-                  <input
-                    className={s.input}
-                    value={specModel}
-                    onChange={(e) => setSpecModel(e.target.value)}
-                    placeholder="WH-1000"
-                  />
-                </label>
-                <label className={s.label}>
-                  <span>Color</span>
-                  <input
-                    className={s.input}
-                    value={specColor}
-                    onChange={(e) => setSpecColor(e.target.value)}
-                    placeholder="Black"
-                  />
-                </label>
-              </div>
-            </fieldset>
-
-            <div className={s.flagsRow}>
-              <label className={s.check}>
-                <input
-                  type="checkbox"
-                  checked={isPreorder}
-                  onChange={(e) => setIsPreorder(e.target.checked)}
-                />
-                <span>isPreorder</span>
-              </label>
-
-              <label className={s.check}>
-                <input
-                  type="checkbox"
-                  checked={isFeatured}
-                  onChange={(e) => setIsFeatured(e.target.checked)}
-                />
-                <span>isFeatured</span>
-              </label>
-
+            {/* ⬇️ NUEVO: toggles de modo */}
+            <div style={{ display: "flex", gap: 8 }}>
               <button
-                type="submit"
-                disabled={creating}
-                className={`${s.btn} ${creating ? s.btnDisabled : s.btnPrimary}`}
-                title="Crear producto (POST /products)"
+                type="button"
+                onClick={() => setMode("all")}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 8,
+                  border: "1px solid #ddd",
+                  background: mode === "all" ? "#eef" : "white",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+                title="Ver todos los productos"
               >
-                {creating ? "Creando…" : "Crear producto"}
+                Todos
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("low")}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 8,
+                  border: "1px solid #ddd",
+                  background: mode === "low" ? "#eef" : "white",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+                title="Ver productos con stock bajo"
+              >
+                Stock bajo
+              </button>
+              {/* ⬇️⬇️ NUEVO: botón de promociones */}
+              <button
+                type="button"
+                onClick={() => setMode("promos")}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 8,
+                  border: "1px solid #ddd",
+                  background: mode === "promos" ? "#eef" : "white",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+                title="Ver promociones"
+              >
+                Promociones
               </button>
             </div>
 
-            {msg && <p className={msg.includes("✅") ? s.msgOk : s.msgErr}>{msg}</p>}
-          </form>
-        )}
-
-        {/* 🔹 NUEVO: Panel de tipos de promociones */}
-        <section className={s.card} style={{ marginTop: 16 }}>
-          <div className={s.sectionTitle}>Tipos de promociones (backend)</div>
-          {promoTypesLoading && <p className={s.p0}>Cargando tipos…</p>}
-          {!promoTypesLoading && promoTypesErr && <p className={s.msgErr}>{promoTypesErr}</p>}
-          {!promoTypesLoading && !promoTypesErr && (
-            <ul style={{ margin: 0, paddingLeft: 18 }}>
-              {promoTypes.map((t) => (
-                <li key={t.id}>
-                  <strong>{t.name}</strong> <code style={{ opacity: 0.7 }}>({t.id})</code>
-                  <div style={{ fontSize: 13, color: "#666" }}>{t.description}</div>
-                </li>
-              ))}
-              {promoTypes.length === 0 && <li>No hay tipos definidos.</li>}
-            </ul>
-          )}
-        </section>
-
-        {created && (
-          <section className={s.successCard}>
-            <div className={s.successTitle}>Producto creado</div>
-            <div className={s.kv}>
-              <div className={s.kvRow}><div className={s.kvKey}>ID</div><div className={s.kvVal}>{created._id}</div></div>
-              <div className={s.kvRow}><div className={s.kvKey}>Nombre</div><div className={s.kvVal}>{created.name}</div></div>
-              <div className={s.kvRow}><div className={s.kvKey}>Precio</div><div className={s.kvVal}>{created.price}</div></div>
-              <div className={s.kvRow}><div className={s.kvKey}>Categoría</div><div className={s.kvVal}>{created.category}</div></div>
-              <div className={s.kvRow}><div className={s.kvKey}>Stock</div><div className={s.kvVal}>{created.stock}</div></div>
-              <div className={s.kvRow}><div className={s.kvKey}>Talles</div><div className={s.kvVal}>{created.sizes?.join(", ")}</div></div>
-              {!!created.images?.length && (
-                <div className={s.kvRow}><div className={s.kvKey}>Imágenes</div><div className={s.kvVal}>{created.images.join(", ")}</div></div>
-              )}
-              {"isActive" in created && (
-                <div className={s.kvRow}><div className={s.kvKey}>Activo</div><div className={s.kvVal}>{String(created.isActive)}</div></div>
-              )}
-              {"createdAt" in created && created.createdAt && (
-                <div className={s.kvRow}><div className={s.kvKey}>Creado</div><div className={s.kvVal}>{formatDate(created.createdAt)}</div></div>
-              )}
-              <div className={s.kvRow}><div className={s.kvKey}>Flags</div><div className={s.kvVal}>preorder={String(created.isPreorder)} • featured={String(created.isFeatured)}</div></div>
+            <div style={{ opacity: 0.85 }}>
+              {mode === "low" ? "Total (stock bajo)" : mode === "promos" ? "Total (promos)" : "Total"}: <strong>{total}</strong>
             </div>
 
-            {!!createdImgs.length && (
-              <div className={s.gallery}>
-                {createdImgs.map((src, i) => (
-                  <img key={src + i} src={src} alt={`${created.name} ${i + 1}`} className={s.thumb}/>
-                ))}
-              </div>
-            )}
+            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+              <label style={{ fontSize: 13, opacity: 0.8 }}>Por página:</label>
+              <select
+                value={limit}
+                onChange={(e) => changeLimit(Number(e.target.value))}
+                style={{ padding: "6px 8px", borderRadius: 8, border: "1px solid #ddd" }}
+              >
+                {[10, 20, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
 
-            <div className={s.viewRow}>
-              <Link href={`/producto/${created._id}`} className={s.viewLink}>
-                Ver producto
+              <div style={{ opacity: 0.8 }}>Página <strong>{page}</strong> de <strong>{pageCount}</strong></div>
+
+              <button
+                type="button"
+                onClick={goPrev}
+                disabled={offset <= 0}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 8,
+                  border: "1px solid #ddd",
+                  background: offset <= 0 ? "#f3f3f3" : "white",
+                  cursor: offset <= 0 ? "default" : "pointer",
+                  fontWeight: 600,
+                }}
+                title="Anterior"
+              >
+                ◀
+              </button>
+              <button
+                type="button"
+                onClick={goNext}
+                disabled={offset + limit >= total}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 8,
+                  border: "1px solid #ddd",
+                  background: offset + limit >= total ? "#f3f3f3" : "white",
+                  cursor: offset + limit >= total ? "default" : "pointer",
+                  fontWeight: 600,
+                }}
+                title="Siguiente"
+              >
+                ▶
+              </button>
+
+              <Link
+                href="/admin/productos/nuevo"
+                style={{
+                  marginLeft: 8,
+                  padding: "8px 12px",
+                  borderRadius: 8,
+                  border: "1px solid #ddd",
+                  background: "white",
+                  fontWeight: 700,
+                }}
+                title="Crear producto"
+              >
+                + Crear producto
               </Link>
             </div>
-          </section>
-        )}
-      </div>
+          </div>
+
+          {loading && <p>Cargando…</p>}
+          {err && !loading && <p style={{ color: "crimson" }}>{err}</p>}
+
+          {/* ===================== LISTA DE PROMOCIONES ===================== */}
+          {mode === "promos" && !loading && !err && (
+            <>
+              {promos.length === 0 ? (
+                <div style={{ border: "1px dashed #ccc", borderRadius: 12, padding: 16 }}>
+                  <p style={{ margin: 0 }}>No hay promociones.</p>
+                </div>
+              ) : (
+                <section
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+                    gap: 12,
+                  }}
+                >
+                  {promos.map((pm) => {
+                    const active = pm.active ?? (pm.startDate && pm.endDate
+                      ? Date.now() >= new Date(pm.startDate).getTime() && Date.now() <= new Date(pm.endDate).getTime()
+                      : undefined);
+                    const discount =
+                      typeof pm.discountPercent === "number"
+                        ? `${pm.discountPercent}%`
+                        : (typeof pm.discountAmount === "number" ? fmtMoney(pm.discountAmount) : "—");
+                    const productsCount = Array.isArray(pm.products) ? pm.products.length : 0;
+
+                    return (
+                      <article
+                        key={pm._id}
+                        style={{
+                          border: "1px solid #eee",
+                          borderRadius: 12,
+                          background: "#fff",
+                          padding: 12,
+                          display: "grid",
+                          gap: 8,
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                          <div style={{ fontWeight: 700, fontSize: 16 }}>{pm.name || "(Promo)"}</div>
+                          {typeof active === "boolean" && (
+                            <span
+                              style={{
+                                padding: "2px 8px",
+                                borderRadius: 999,
+                                fontSize: 12,
+                                background: active ? "#e8f7ee" : "#f7e8e8",
+                                border: `1px solid ${active ? "#b8e2c4" : "#e2b8b8"}`,
+                              }}
+                              title={active ? "Activa" : "Inactiva"}
+                            >
+                              {active ? "Activa" : "Inactiva"}
+                            </span>
+                          )}
+                        </div>
+
+                        {pm.description && (
+                          <div style={{ fontSize: 13, color: "#555" }}>{pm.description}</div>
+                        )}
+
+                        <div style={{ fontSize: 13, color: "#666" }}>
+                          Tipo: <strong>{pm.type || "—"}</strong>
+                          &nbsp;•&nbsp; Descuento: <strong>{discount}</strong>
+                        </div>
+
+                        <div style={{ fontSize: 12, color: "#666" }}>
+                          Vigencia: {fmtDate(pm.startDate)} — {fmtDate(pm.endDate)}
+                        </div>
+
+                        <div style={{ fontSize: 12, color: "#666" }}>
+                          Productos: <strong>{productsCount}</strong>
+                        </div>
+
+                        {/* acciones/links, ajustá rutas si tenés páginas de edición de promos */}
+                        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 4 }}>
+                          <Link href={`/admin/promociones/${pm._id}`} style={{ textDecoration: "underline" }}>
+                            Ver/editar
+                          </Link>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </section>
+              )}
+            </>
+          )}
+          {/* =================== FIN LISTA DE PROMOCIONES =================== */}
+
+          {/* Productos: se muestran cuando NO estamos en modo promos */}
+          {mode !== "promos" && !loading && !err && products.length === 0 && (
+            <div style={{ border: "1px dashed #ccc", borderRadius: 12, padding: 16 }}>
+              <p style={{ margin: 0 }}>No hay productos.</p>
+            </div>
+          )}
+
+          {mode !== "promos" && !loading && !err && products.length > 0 && (
+            <section
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+                gap: 12,
+              }}
+            >
+              {products.map((p) => {
+                const firstImg = absImageUrl(p.images?.[0] || "");
+                const lowStock = typeof p.stock === "number" && p.stock <= 5;
+                return (
+                  <article
+                    key={p._id}
+                    style={{
+                      border: "1px solid #eee",
+                      borderRadius: 12,
+                      background: "#fff",
+                      padding: 12,
+                      display: "grid",
+                      gap: 8,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: "100%",
+                        aspectRatio: "4 / 3",
+                        borderRadius: 10,
+                        border: "1px solid #f0f0f0",
+                        background: "#fafafa",
+                        overflow: "hidden",
+                        display: "grid",
+                        placeItems: "center",
+                      }}
+                    >
+                      {firstImg ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={firstImg}
+                          alt={p.name}
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        />
+                      ) : (
+                        <div style={{ fontSize: 12, color: "#999" }}>Sin imagen</div>
+                      )}
+                    </div>
+
+                    <div style={{ display: "grid", gap: 4 }}>
+                      <div style={{ fontWeight: 700, fontSize: 16 }}>{p.name}</div>
+                      <div style={{ fontSize: 13, color: "#666" }}>
+                        Cat: <strong>{p.category}</strong>
+                        &nbsp;•&nbsp; Precio: <strong>{fmtMoney(p.price)}</strong>
+                      </div>
+                      <div style={{ fontSize: 13, color: lowStock ? "#b00020" : "#666" }}>
+                        Stock: <strong>{p.stock}</strong>{lowStock ? " (bajo)" : ""}
+                      </div>
+                      <div style={{ fontSize: 12, color: "#666" }}>
+                        Talles: {p.sizes?.length ? p.sizes.join(", ") : "—"}
+                      </div>
+                      <div style={{ fontSize: 12, color: "#666" }}>
+                        Flags: preorder=<strong>{String(p.isPreorder)}</strong> • featured=<strong>{String(p.isFeatured)}</strong>
+                      </div>
+                      <div style={{ fontSize: 12, color: "#666" }}>
+                        Creado: {fmtDate(p.createdAt)}{p.updatedAt ? ` • Editado: ${fmtDate(p.updatedAt)}` : ""}
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 4 }}>
+                      {/* Ajustá estas rutas si tu front usa otras paths */}
+                      <Link href={`/producto/${p._id}`} style={{ textDecoration: "underline" }}>
+                        Ver público
+                      </Link>
+                      <Link href={`/admin/productos/editar/${p._id}`} style={{ textDecoration: "underline" }}>
+                        Editar
+                      </Link>
+                    </div>
+                  </article>
+                );
+              })}
+            </section>
+          )}
+        </>
+      )}
     </main>
   );
 }

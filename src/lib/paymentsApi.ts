@@ -1,6 +1,8 @@
 // src/lib/paymentsApi.ts
 import { apiFetch } from "@/lib/api";
 
+/* ==================== Mercado Pago: crear preferencias ==================== */
+
 export type MPCheckoutResponse = {
   id: string;
   init_point: string;
@@ -22,7 +24,10 @@ export async function createMercadoPagoCheckout(opts?: {
   if (opts?.pendingUrl) qs.set("pendingUrl", opts.pendingUrl);
 
   const path = `/payments/mercadopago/checkout${qs.toString() ? `?${qs.toString()}` : ""}`;
-  const r = await apiFetch<MPCheckoutResponse>(path, { method: "POST", body: JSON.stringify({}) });
+  const r = await apiFetch<MPCheckoutResponse>(path, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
   return r;
 }
 
@@ -40,4 +45,68 @@ export async function createMercadoPagoPartialCheckout(body: {
     body: JSON.stringify(body),
   });
   return r;
+}
+
+/* ==================== Listado / detalle / cancelación de pagos (admin) ==================== */
+
+export type Payment = {
+  _id: string;
+  provider: "mercadopago" | "stripe" | "paypal" | string;
+  status: string; // approved | pending | rejected | created | authorized | in_process | ...
+  amount: number;
+  currency?: string;
+  orderId?: string;
+  externalId?: string;          // id del PSP (MP payment_id, etc.)
+  providerPaymentId?: string;   // alias común si lo devuelve así el backend
+  approvalUrl?: string;
+  captureId?: string;
+  createdAt?: string;
+  [k: string]: any;
+};
+
+/** Estados que típicamente sí permiten cancelación */
+export const CANCELLABLE_STATUSES = [
+  "pending",
+  "authorized",
+  "created",
+  "in_process",
+  "in_mediation",
+];
+
+/**
+ * GET /payments
+ * Devuelve el listado de pagos (puede venir vacío).
+ * Normaliza respuestas {success,data:[...]} o arrays directos.
+ */
+export async function listPayments(params?: { limit?: number; offset?: number }) {
+  const q = new URLSearchParams();
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
+  const path = `/payments${q.toString() ? `?${q.toString()}` : ""}`;
+
+  const res = await apiFetch<any>(path, { method: "GET" });
+  const data = Array.isArray(res) ? res : res?.data ?? [];
+  return data as Payment[];
+}
+
+/**
+ * GET /payments/:id
+ * Devuelve un pago por id.
+ * Normaliza respuestas {success,data:{...}} o el objeto directo.
+ */
+export async function getPayment(id: string) {
+  const res = await apiFetch<any>(`/payments/${id}`, { method: "GET" });
+  return (res?.data ?? res) as Payment;
+}
+
+/**
+ * DELETE /payments/:id
+ * Intenta cancelar un pago. Lanza Error con mensaje legible si el backend devuelve success:false.
+ */
+export async function cancelPayment(paymentId: string) {
+  const res = await apiFetch<any>(`/payments/${paymentId}`, { method: "DELETE" });
+  if (res?.success === false) {
+    throw new Error(res?.message || "No fue posible cancelar el pago");
+  }
+  return res;
 }

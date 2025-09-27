@@ -22,23 +22,22 @@ async function getJSON(url: string) {
 }
 
 export default async function Hero() {
-  const base = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3000";
+  // ⬅️ por defecto 3001 (backend)
+  const base = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3001";
   let cover: MediaDoc | null = null;
 
-  // 1) Endpoint preferido: /media/cover-image/active
+  // 1) preferido
   const a = await getJSON(`${base}/media/cover-image/active`);
-  if (a?.data?.url) {
-    cover = a.data as MediaDoc;
-  }
+  if (a?.data?.url) cover = a.data as MediaDoc;
 
-  // 2) Fallback: /media?type=cover&active=true  (lista -> tomo la primera)
+  // 2) fallback
   if (!cover) {
     const b = await getJSON(`${base}/media?type=cover&active=true`);
     const arr = Array.isArray(b?.data) ? (b!.data as MediaDoc[]) : [];
     cover = arr.find(x => x.active && x.type === "cover") ?? null;
   }
 
-  // 3) Último intento: /media/cover-image (lista) -> busco active:true
+  // 3) último intento
   if (!cover) {
     const c = await getJSON(`${base}/media/cover-image`);
     const arr = Array.isArray(c?.data) ? (c!.data as MediaDoc[]) : [];
@@ -48,11 +47,7 @@ export default async function Hero() {
   if (!cover?.url) return null;
 
   const ver = cover.updatedAt ?? Date.now();
-  const coverUrl = `${base}/${cover.url}?v=${encodeURIComponent(ver)}`.replace(
-    /([^:]\/)\/+/g,
-    "$1"
-  );
-
+  const coverUrl = `${base}/${cover.url}?v=${encodeURIComponent(ver)}`.replace(/([^:]\/)\/+/g, "$1");
   const styleVar = { ["--hero-bg"]: `url(${coverUrl})` } as React.CSSProperties;
 
   return (
