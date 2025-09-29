@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import AuthDialog from "../Auth/AuthDialog";
 import HydrateGoogleOAuth from "@/app/components/Auth/HydrateGoogleOAuth"; // 👈 NUEVO
 import styles from "./Header.module.css";
+import SearchModal from "@/app/components/Search/SearchModal";
 
 /* Helpers: detectar rol desde el JWT almacenado */
 function getJwtPayload(): any | null {
@@ -44,6 +45,7 @@ export default function Header() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isUser, setIsUser]   = useState(false); // 👈 NUEVO
   const [openMenu, setOpenMenu] = useState(false); // 👈 NUEVO
+  const [openSearch, setOpenSearch] = useState(false);
 
   useEffect(() => { 
     setIsAdmin(isAdminFromToken()); 
@@ -70,10 +72,11 @@ export default function Header() {
               </svg>
             </button>
 
-            {/* Buscar (igual que antes, pero a la izquierda en mobile) */}
-            <Link
-              href="/buscar"
-              className={`${styles.iconBtn} ${styles.iconBtnSearch} ${styles.iconForce}`}
+            {/* Buscar (izquierda en mobile) */}
+            <button
+              type="button"
+              onClick={() => setOpenSearch(true)}
+              className={`${styles.iconBtn} ${styles.iconBtnSearch} ${styles.iconForce} ${styles.searchMobile}`}
               aria-label="Buscar"
               title="Buscar productos"
             >
@@ -81,7 +84,7 @@ export default function Header() {
                 <circle cx="11" cy="11" r="6.5" stroke="currentColor" fill="none" strokeWidth="1.8" />
                 <path d="M20 20l-3.2-3.2" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" />
               </svg>
-            </Link>
+            </button>
           </div>
 
           {/* CENTRO: marca (centrada en mobile) */}
@@ -130,8 +133,22 @@ export default function Header() {
             </nav>
           </div>
 
-          {/* DER: cuenta + carrito */}
+          {/* DER: buscar (desktop) + cuenta + carrito */}
           <div className={styles.actions} aria-label="Acciones derecha">
+            {/* ✅ NUEVO: Buscar visible en desktop (oculto en mobile vía CSS) */}
+            <button
+              type="button"
+              onClick={() => setOpenSearch(true)}
+              className={`${styles.iconBtn} ${styles.iconForce} ${styles.searchDesktop}`}
+              aria-label="Buscar"
+              title="Buscar productos"
+            >
+              <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+                <circle cx="11" cy="11" r="6.5" stroke="currentColor" fill="none" strokeWidth="1.8" />
+                <path d="M20 20l-3.2-3.2" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </button>
+
             <button
               type="button"
               onClick={() => setOpenAuth(true)}
@@ -196,6 +213,7 @@ export default function Header() {
       )}
 
       <AuthDialog open={openAuth} onClose={() => setOpenAuth(false)} />
+      <SearchModal open={openSearch} onClose={() => setOpenSearch(false)} />
     </>
   );
 }

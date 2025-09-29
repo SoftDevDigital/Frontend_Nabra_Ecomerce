@@ -1,4 +1,3 @@
-// src/app/carrito/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -51,86 +50,70 @@ type CartResponse = CartResponseWrapped | CartResponseFlat;
 /* === NUEVO: contrato /cart/add (201) === */
 type AddToCartResponse = {
   message: string;
-  cartItem: {
-    _id: string;
-    productId: string;
-    quantity: number;
-    price: number;
-    subtotal: number;
-  };
+  cartItem: { _id: string; productId: string; quantity: number; price: number; subtotal: number; };
   cartTotal: number;
 };
-
-// debajo de AddToCartResponse
 type UpdateCartItemResponse = {
   message: string;
-  cartItem: {
-    _id: string;
-    quantity: number;
-    subtotal: number;
-  };
+  cartItem: { _id: string; quantity: number; subtotal: number; };
   cartTotal: number;
 };
-
-// debajo de UpdateCartItemResponse
-type DeleteCartItemResponse = {
-  message: string;
-  cartTotal: number;
-};
-
+type DeleteCartItemResponse = { message: string; cartTotal: number; };
 // 🆕 limpiar carrito
 type ClearCartResponse = {
   success: boolean;
-  data: {
-    _id: string;
-    items: any[];
-    userId: string;
-    createdAt: string;
-    updatedAt: string;
-    __v?: number;
-  };
+  data: { _id: string; items: any[]; userId: string; createdAt: string; updatedAt: string; __v?: number; };
   message?: string;
 };
-
 type RemoveCartItemResponse = {
   success: boolean;
-  data: {
-    _id: string;
-    items: any[];
-    userId: string;
-    createdAt: string;
-    updatedAt: string;
-    __v?: number;
-  };
+  data: { _id: string; items: any[]; userId: string; createdAt: string; updatedAt: string; __v?: number; };
   message?: string;
 };
 
-
-
 type SummaryItem = {
-  _id: string;
-  productId: string;
-  productName: string;
-  quantity: number;
-  originalPrice: number;
-  discountedPrice: number;
-  subtotal: number;
+  _id: string; productId: string; productName: string; quantity: number;
+  originalPrice: number; discountedPrice: number; subtotal: number;
 };
 
 // === /cart/summary-with-discounts (envuelve igual que apply-coupon) ===
-type CartSummaryWithDiscountsData = {
-  cartSummary: ApplyCouponCartSummary; // items, subtotal, estimatedTax, estimatedTotal, currency...
-  discounts:   ApplyCouponDiscounts;   // success, totalDiscount, finalTotal, savings...
-  finalTotal:  number;                 // total final (con tax/shipping según back)
+type ApplyCouponCartItem = {
+  _id: string;
+  product: { _id: string; name: string; price: number; images?: string[]; [k: string]: any };
+  quantity: number;
+  size?: string;
+  itemTotal: number;
 };
-
-type CartSummaryWithDiscountsWrapped = {
+type ApplyCouponCartSummary = {
+  items: ApplyCouponCartItem[];
+  totalItems: number;
+  totalQuantity: number;
+  subtotal: number;
+  estimatedTax?: number;
+  estimatedTotal: number;
+  currency?: string;
+  originalTotal?: number;
+};
+type ApplyCouponDiscounts = {
   success: boolean;
-  data: CartSummaryWithDiscountsData;
+  appliedPromotions: any[];
+  totalDiscount: number;
+  originalTotal: number;
+  finalTotal: number;
+  savings: number;
+  errors?: string[];
+};
+type ApplyCouponResponse = {
+  success: boolean;
+  data: { cartSummary: ApplyCouponCartSummary; discounts: ApplyCouponDiscounts; finalTotal: number; };
   message?: string;
 };
-
-// Para aceptar wrapped o plano (por si el back alguna vez lo envía sin wrapper)
+type CartSummaryWithDiscountsData = {
+  cartSummary: ApplyCouponCartSummary;
+  discounts: ApplyCouponDiscounts;
+  finalTotal: number;
+};
+type CartSummaryWithDiscountsWrapped = { success: boolean; data: CartSummaryWithDiscountsData; message?: string; };
 type CartSummaryWithDiscountsResponse = CartSummaryWithDiscountsWrapped | CartSummaryWithDiscountsData;
 
 /* ===== Pedido ===== */
@@ -153,7 +136,7 @@ type CreateOrderResponse =
   | { success: true; data: OrderOut; message?: string }
   | { success: false; message: string };
 
-// 🔹 NUEVO: tipos para Promos
+/* 🔹 NUEVO: tipos para Promos */
 type Promotion = {
   _id: string;
   name: string;
@@ -162,238 +145,75 @@ type Promotion = {
   discountPercentage?: number;
   startDate?: string;
   endDate?: string;
-  conditions?: {
-    categories?: string[];
-    minimumPurchaseAmount?: number;
-    [k: string]: any;
-  };
+  conditions?: { categories?: string[]; minimumPurchaseAmount?: number; [k: string]: any; };
   isActive?: boolean;
 };
-
-type PromotionType = {
-  id: string;
-  name: string;
-  description: string;
-};
-
+type PromotionType = { id: string; name: string; description: string; };
 type ApplyDiscountsRequestItem = {
-  productId: string;
-  cartItemId: string;
-  productName?: string;
-  category?: string;
-  quantity: number;
-  price: number;
-  size?: string | null;
+  productId: string; cartItemId: string; productName?: string; category?: string;
+  quantity: number; price: number; size?: string | null;
 };
-
 type ApplyDiscountsResponse = {
-  discounts: {
-    promotionId: string;
-    promotionName: string;
-    type: string;
-    discountAmount: number;
-    appliedToItems: string[];
-    description?: string;
-  }[];
-  totalDiscount: number;
-  originalAmount: number;
-  finalAmount: number;
+  discounts: { promotionId: string; promotionName: string; type: string; discountAmount: number; appliedToItems: string[]; description?: string; }[];
+  totalDiscount: number; originalAmount: number; finalAmount: number;
 };
-
 type ValidateCouponResponse =
-  | {
-      valid: true;
-      coupon: { code: string; discountPercentage?: number; validUntil?: string; usageLimit?: number; usedCount?: number };
-      message?: string;
-    }
+  | { valid: true; coupon: { code: string; discountPercentage?: number; validUntil?: string; usageLimit?: number; usedCount?: number }; message?: string; }
   | { valid: false; message?: string; error?: string };
 
-/* ====== NUEVO: Tipos para POST /cart/apply-coupon ====== */
-type ApplyCouponCartItem = {
-  _id: string;
-  product: { _id: string; name: string; price: number; images?: string[]; [k: string]: any };
-  quantity: number;
-  size?: string;
-  itemTotal: number; // price * quantity (unitario por cantidad)
-};
-
-type ApplyCouponCartSummary = {
-  items: ApplyCouponCartItem[];
-  totalItems: number;
-  totalQuantity: number;
-  subtotal: number;
-  estimatedTax?: number;
-  estimatedTotal: number; // subtotal - desc + tax + shipping (según back)
-  currency?: string;
-  originalTotal?: number;
-};
-
-type ApplyCouponDiscounts = {
-  success: boolean;
-  appliedPromotions: any[];
-  totalDiscount: number;
-  originalTotal: number;
-  finalTotal: number;
-  savings: number;
-  errors?: string[];
-};
-
-type ApplyCouponResponse = {
-  success: boolean;
-  data: {
-    cartSummary: ApplyCouponCartSummary;
-    discounts: ApplyCouponDiscounts;
-    finalTotal: number;
-  };
-  message?: string;
-};
-
-
-// === Shipping address en carrito ===
+/* === Shipping address en carrito === */
 type SaveShippingAddressBody = {
-  fullName: string;
-  phone: string;
-  addressLine: string;
-  city: string;
-  postalCode: string;
-  province?: string;
-  notes?: string;
+  fullName: string; phone: string; addressLine: string; city: string; postalCode: string; province?: string; notes?: string;
 };
-
 type SaveShippingAddressResponse = {
   success: boolean;
-  data?: {
-    success: boolean;
-    shippingAddress: {
-      country?: string;        // ej. "MX"
-      postal_code?: string;    // ej. "1405"
-      city?: string;           // ej. "CABA"
-      contact?: { name?: string; phone?: string; email?: string };
-      // ...otros campos que tu back quiera devolver
-    };
-    message?: string;
-  };
+  data?: { success: boolean; shippingAddress: { country?: string; postal_code?: string; city?: string; contact?: { name?: string; phone?: string; email?: string } } };
   message?: string;
 };
 
-
-// === /cart/summary (resumen plano) ===
-type CartSummaryPlainItem = {
-  _id?: string;
-  productId?: string;
-  productName?: string;
-  quantity: number;
-  price?: number;
-  itemTotal?: number;
-};
-
+/* === /cart/summary (resumen plano) === */
+type CartSummaryPlainItem = { _id?: string; productId?: string; productName?: string; quantity: number; price?: number; itemTotal?: number; };
 type CartSummaryPlain = {
   items: CartSummaryPlainItem[];
-  totalItems: number;
-  totalQuantity: number;
-  subtotal: number;
-  estimatedTax: number;
-  estimatedTotal: number;
-  currency?: string; // ej. "USD"
+  totalItems: number; totalQuantity: number; subtotal: number; estimatedTax: number; estimatedTotal: number; currency?: string;
 };
+type CartSummaryPlainWrapped = { success: boolean; data: CartSummaryPlain; message?: string };
 
-type CartSummaryPlainWrapped = {
-  success: boolean;
-  data: CartSummaryPlain;
-  message?: string;
-};
-
-
-// ====== NUEVO: Tipos para GET /cart/total ======
-// (…tus tipos existentes…)
-type CartTotalItem = {
-  _id: string;
-  product: { _id: string; name: string; price: number; images?: string[]; [k: string]: any };
-  quantity: number;
-  size?: string;
-  itemTotal: number;
-};
-
-type CartTotalData = {
-  items: CartTotalItem[];
-  totalItems: number;
-  totalQuantity: number;
-  subtotal: number;
-  estimatedTax?: number;
-  estimatedTotal: number;
-  currency?: string; // ej. "USD"
-};
-
+/* ====== NUEVO: Tipos para GET /cart/total ====== */
+type CartTotalItem = { _id: string; product: { _id: string; name: string; price: number; images?: string[]; [k: string]: any }; quantity: number; size?: string; itemTotal: number; };
+type CartTotalData = { items: CartTotalItem[]; totalItems: number; totalQuantity: number; subtotal: number; estimatedTax?: number; estimatedTotal: number; currency?: string; };
 type CartTotalWrapped = { success: boolean; data: CartTotalData; message?: string };
 type CartTotalResponse = CartTotalWrapped | CartTotalData;
 
-
-type CartValidateData = {
-  valid: boolean;
-  errors: string[];
-  warnings: string[];
-};
-
+type CartValidateData = { valid: boolean; errors: string[]; warnings: string[]; };
 type CartValidateWrapped = { success: boolean; data: CartValidateData; message?: string };
 type CartValidateResponse = CartValidateWrapped | CartValidateData;
 
-
-// ====== NUEVO: GET /cart/with-shipping ======
-type ShippingRate = {
-  id: string;
-  carrier: string;        // ej: "fedex"
-  service: string;        // ej: "ground" | "express"
-  price: number;
-  currency?: string;      // ej: "MXN"
-  days?: string;          // ej: "3 a 5 días"
-  serviceId?: string;
-  metadata?: any;
-};
-
-type WithShippingAddress = {
-  country?: string;
-  postal_code?: string;
-  city?: string;
-  contact?: { name?: string; phone?: string; email?: string };
-};
-
+/* ====== NUEVO: GET /cart/with-shipping ====== */
+type ShippingRate = { id: string; carrier: string; service: string; price: number; currency?: string; days?: string; serviceId?: string; metadata?: any; };
+type WithShippingAddress = { country?: string; postal_code?: string; city?: string; contact?: { name?: string; phone?: string; email?: string }; };
 type WithShippingData = {
-  cart: {
-    _id: string;
-    items: { _id: string; product: { _id: string; name: string; price?: number; images?: string[]; stock?: number; isPreorder?: boolean }; quantity: number; size?: string }[];
-    userId: string;
-    createdAt?: string;
-    updatedAt?: string;
-    shippingAddress?: WithShippingAddress;
-  };
-  summary: CartTotalData; // mismos campos que ya definiste: items, subtotal, estimatedTax, estimatedTotal, currency...
-  shipping: {
-    rates: ShippingRate[];
-    address?: WithShippingAddress;
-  };
+  cart: { _id: string; items: { _id: string; product: { _id: string; name: string; price?: number; images?: string[]; stock?: number; isPreorder?: boolean }; quantity: number; size?: string }[]; userId: string; createdAt?: string; updatedAt?: string; shippingAddress?: WithShippingAddress; };
+  summary: CartTotalData;
+  shipping: { rates: ShippingRate[]; address?: WithShippingAddress; };
 };
-
 type WithShippingWrapped = { success: boolean; data: WithShippingData; message?: string };
 type WithShippingResponse = WithShippingWrapped | WithShippingData;
 
-
 /* ===== Helper fetch (con Bearer) ===== */
 async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3001"; // 👈 3001
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3001";
   const token = typeof window !== "undefined" ? localStorage.getItem("nabra_token") : null;
-
   const headers = new Headers(init.headers || {});
   const isFormData = typeof FormData !== "undefined" && (init as any).body instanceof FormData;
   if (!isFormData && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  // ✅ FIX: faltaban backticks
   if (token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
   if (!headers.has("Accept")) headers.set("Accept", "application/json");
-
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
   if (res.status === 204) return undefined as unknown as T;
-
   const text = await res.text();
   const json = text ? JSON.parse(text) : null;
-
   if (!res.ok) {
     const apiMsg =
       json?.message ||
@@ -406,8 +226,28 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 /* ===== Util ===== */
-const currency = (n?: number) =>
-  typeof n === "number" ? new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(n) : "";
+const currency = (n?: number) => typeof n === "number"
+  ? new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(n)
+  : "";
+
+/* ======== NUEVO: helper para normalizar la URL de redirección de MP ======== */
+function getMpRedirectUrl(resp: any): string | undefined {
+  // soportar varias variantes comunes
+  const r = resp ?? {};
+  const d = r.data ?? {};
+  return (
+    r.init_point ||
+    r.sandbox_init_point ||
+    r.approvalUrl ||
+    r.paymentUrl ||
+    d.init_point ||
+    d.sandbox_init_point ||
+    d.approvalUrl ||
+    d.paymentUrl ||
+    d.pointOfInteraction?.transactionData?.ticket_url || // algunas integraciones
+    undefined
+  );
+}
 
 /* ===== Página ===== */
 export default function CartPage() {
@@ -427,7 +267,7 @@ export default function CartPage() {
   const [addProductId, setAddProductId] = useState("");
   const [addQty, setAddQty] = useState<number>(1);
   const [addSize, setAddSize] = useState<string>("");
-  const [addColor, setAddColor] = useState<string>(""); // 👈 NUEVO
+  const [addColor, setAddColor] = useState<string>("");
   const [adding, setAdding] = useState(false);
   const [addMsg, setAddMsg] = useState<string | null>(null);
 
@@ -456,34 +296,29 @@ export default function CartPage() {
   // Cupones / summary con descuentos
   const [couponCode, setCouponCode] = useState<string>("");
   const [summaryLoading, setSummaryLoading] = useState<boolean>(false);
-  const [summaryErr,   setSummaryErr]   = useState<string | null>(null);
-  const [summary,      setSummary]      = useState<CartSummaryResponse | null>(null);
+  const [summaryErr, setSummaryErr] = useState<string | null>(null);
+  const [summary, setSummary] = useState<any | null>(null);
   const [summaryV2, setSummaryV2] = useState<CartSummaryWithDiscountsData | null>(null);
-  // 🔹 NUEVO: estado de resultado crudo de /cart/apply-coupon
   const [couponResult, setCouponResult] = useState<ApplyCouponResponse | null>(null);
 
-  // 🔹 NUEVO: estado para promos activas y tipos
+  // Promos
   const [activePromos, setActivePromos] = useState<Promotion[]>([]);
   const [promoTypes, setPromoTypes] = useState<PromotionType[]>([]);
   const [promosLoading, setPromosLoading] = useState<boolean>(false);
   const [promosErr, setPromosErr] = useState<string | null>(null);
-
-  // 🔹 NUEVO: estado para resultado de /promotions/apply-discounts
   const [promoCalc, setPromoCalc] = useState<ApplyDiscountsResponse | null>(null);
   const [promoCalcLoading, setPromoCalcLoading] = useState<boolean>(false);
   const [promoCalcErr, setPromoCalcErr] = useState<string | null>(null);
-
-  // 🔹 NUEVO: estado para validar cupón
   const [couponValidation, setCouponValidation] = useState<ValidateCouponResponse | null>(null);
   const [couponValidating, setCouponValidating] = useState<boolean>(false);
 
-  // 🔹 NUEVO (envíos): estado para cálculo de envío
-  const [addressId, setAddressId] = useState<string>(""); // e.g. "addr_001"
+  // Envíos
+  const [addressId, setAddressId] = useState<string>("");
   const [shipCalcLoading, setShipCalcLoading] = useState(false);
   const [shipOptions, setShipOptions] = useState<import("@/lib/shippingApi").ShippingOption[] | null>(null);
   const [shipCalcErr, setShipCalcErr] = useState<string | null>(null);
 
-  // Form "Guardar dirección de envío en el carrito"
+  // Guardar dirección
   const [addrFullName, setAddrFullName] = useState("Jane Doe");
   const [addrPhone, setAddrPhone] = useState("+54 11 5555-5555");
   const [addrLine, setAddrLine] = useState("Av. Siempre Viva 742");
@@ -494,24 +329,20 @@ export default function CartPage() {
   const [savingAddr, setSavingAddr] = useState(false);
   const [saveAddrMsg, setSaveAddrMsg] = useState<string | null>(null);
 
-
-  // Resumen plano /cart/summary
+  // /cart/summary
   const [plainSummary, setPlainSummary] = useState<CartSummaryPlain | null>(null);
   const [plainSummaryLoading, setPlainSummaryLoading] = useState(false);
   const [plainSummaryErr, setPlainSummaryErr] = useState<string | null>(null);
-
 
   // /cart/total
   const [cartTotalSummary, setCartTotalSummary] = useState<CartTotalData | null>(null);
   const [cartTotalLoading, setCartTotalLoading] = useState(false);
   const [cartTotalErr, setCartTotalErr] = useState<string | null>(null);
 
-
   // /cart/validate
   const [cartValidate, setCartValidate] = useState<CartValidateData | null>(null);
   const [cartValidateLoading, setCartValidateLoading] = useState(false);
   const [cartValidateErr, setCartValidateErr] = useState<string | null>(null);
-
 
   // /cart/with-shipping
   const [withShip, setWithShip] = useState<WithShippingData | null>(null);
@@ -519,7 +350,7 @@ export default function CartPage() {
   const [withShipErr, setWithShipErr] = useState<string | null>(null);
   const [selectedRate, setSelectedRate] = useState<ShippingRate | null>(null);
 
-  // 🆕 MP: estado de pago directo desde carrito
+  // 🆕 MP: estado de pago
   const [payingMp, setPayingMp] = useState(false);
   const [payMsg, setPayMsg] = useState<string | null>(null);
 
@@ -529,7 +360,6 @@ export default function CartPage() {
         typeof it.price === "number"
           ? it.price
           : (typeof it.subtotal === "number" && it.quantity > 0 ? it.subtotal / it.quantity : 0);
-
       return {
         productId: String(it.product?._id || ""),
         cartItemId: String(it._id),
@@ -540,30 +370,22 @@ export default function CartPage() {
         size: it.size ?? undefined,
       };
     });
-
     const totalAmount = cartItems.reduce((acc, ci) => acc + ci.price * ci.quantity, 0);
     return { cartItems, totalAmount };
   }
 
-  // 🔹 NUEVO (envíos): construir items con peso/dimensiones
   function buildShippingItems(items: CartItem[]): import("@/lib/shippingApi").ShipItem[] {
     return items.map((it) => {
       const p: any = it.product || {};
-      const weight = typeof p.weight === "number" ? p.weight : 0.5; // kg default
+      const weight = typeof p.weight === "number" ? p.weight : 0.5;
       const dims = p.dimensions || p.package || {};
       const length = Number(dims.length ?? 20);
-      const width  = Number(dims.width  ?? 15);
+      const width = Number(dims.width ?? 15);
       const height = Number(dims.height ?? 10);
-      return {
-        productId: String(p._id || ""),
-        quantity: Number(it.quantity) || 1,
-        weight,
-        dimensions: { length, width, height },
-      };
+      return { productId: String(p._id || ""), quantity: Number(it.quantity) || 1, weight, dimensions: { length, width, height } };
     });
   }
 
-  // 🔹 NUEVO: fetch promos activas y tipos al montar
   async function fetchActivePromotions(params?: { type?: string; category?: string }) {
     const qs = new URLSearchParams();
     if (params?.type) qs.set("type", params.type);
@@ -579,16 +401,8 @@ export default function CartPage() {
     e.preventDefault();
     setShipOptions(null);
     setShipCalcErr(null);
-
-    if (!addressId.trim()) {
-      setShipCalcErr("Indicá un addressId (ej: addr_001)");
-      return;
-    }
-    if (items.length === 0) {
-      setShipCalcErr("El carrito está vacío");
-      return;
-    }
-
+    if (!addressId.trim()) { setShipCalcErr("Indicá un addressId (ej: addr_001)"); return; }
+    if (items.length === 0) { setShipCalcErr("El carrito está vacío"); return; }
     setShipCalcLoading(true);
     try {
       const cartItems = buildShippingItems(items);
@@ -597,176 +411,102 @@ export default function CartPage() {
     } catch (e: any) {
       setShipOptions(null);
       setShipCalcErr(e?.message || "No se pudo calcular el envío");
-    } finally {
-      setShipCalcLoading(false);
-    }
+    } finally { setShipCalcLoading(false); }
   }
 
-  // 🔹 NUEVO: aplicar descuentos (POST /promotions/apply-discounts)
   async function applyDiscounts(payload: { couponCode?: string; cartItems: ApplyDiscountsRequestItem[]; totalAmount: number }) {
-    return apiFetch<ApplyDiscountsResponse>(`/promotions/apply-discounts`, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
+    return apiFetch<ApplyDiscountsResponse>(`/promotions/apply-discounts`, { method: "POST", body: JSON.stringify(payload) });
   }
-
-  // 🔹 NUEVO: validar cupón (POST /promotions/validate-coupon)
   async function validateCoupon(couponCode: string, userId?: string) {
-    return apiFetch<ValidateCouponResponse>(`/promotions/validate-coupon`, {
-      method: "POST",
-      body: JSON.stringify({ couponCode, userId }),
-    });
+    return apiFetch<ValidateCouponResponse>(`/promotions/validate-coupon`, { method: "POST", body: JSON.stringify({ couponCode, userId }) });
   }
 
   useEffect(() => {
     setPromoCalc(null);
     setCouponValidation(null);
-    setCouponResult(null); // 👈 limpiamos el resultado cuando cambie el texto del cupón
+    setCouponResult(null);
   }, [couponCode]);
 
-  // 🔹 NUEVO: cargar promos activas + tipos al montar
   useEffect(() => {
     let abort = false;
     (async () => {
-      setPromosLoading(true);
-      setPromosErr(null);
+      setPromosLoading(true); setPromosErr(null);
       try {
         const [actives, types] = await Promise.all([fetchActivePromotions(), fetchPromotionTypes()]);
         if (!abort) {
           setActivePromos(Array.isArray(actives?.promotions) ? actives.promotions : []);
           setPromoTypes(Array.isArray(types?.types) ? types.types : []);
         }
-      } catch (e: any) {
-        if (!abort) setPromosErr(e?.message || "No se pudieron cargar las promociones");
-      } finally {
-        if (!abort) setPromosLoading(false);
-      }
+      } catch (e: any) { if (!abort) setPromosErr(e?.message || "No se pudieron cargar las promociones"); }
+      finally { if (!abort) setPromosLoading(false); }
     })();
-    return () => {
-      abort = true;
-    };
+    return () => { abort = true; };
   }, []);
 
-
   async function loadCartValidate() {
-    setCartValidateLoading(true);
-    setCartValidateErr(null);
+    setCartValidateLoading(true); setCartValidateErr(null);
     try {
       const r = await apiFetch<CartValidateResponse>(`/cart/validate`, { method: "GET" });
       const payload: CartValidateData =
-        (r as CartValidateWrapped)?.success === true
-          ? (r as CartValidateWrapped).data
-          : (r as CartValidateData);
-
+        (r as CartValidateWrapped)?.success === true ? (r as CartValidateWrapped).data : (r as CartValidateData);
       if (typeof payload?.valid !== "boolean" || !Array.isArray(payload.errors) || !Array.isArray(payload.warnings)) {
         throw new Error("Formato inesperado en /cart/validate");
       }
       setCartValidate(payload);
-    } catch (e: any) {
-      setCartValidate(null);
-      setCartValidateErr(e?.message || "No se pudo validar el carrito");
-    } finally {
-      setCartValidateLoading(false);
-    }
+    } catch (e: any) { setCartValidate(null); setCartValidateErr(e?.message || "No se pudo validar el carrito"); }
+    finally { setCartValidateLoading(false); }
   }
 
-
   async function loadCartWithShipping() {
-    setWithShipLoading(true);
-    setWithShipErr(null);
+    setWithShipLoading(true); setWithShipErr(null);
     try {
       const r = await apiFetch<WithShippingResponse>(`/cart/with-shipping`, { method: "GET" });
       const payload: WithShippingData =
-        (r as WithShippingWrapped)?.success === true
-          ? (r as WithShippingWrapped).data
-          : (r as WithShippingData);
-
-      if (!payload?.summary || !payload?.shipping) {
-        throw new Error("Formato inesperado en /cart/with-shipping");
-      }
-
+        (r as WithShippingWrapped)?.success === true ? (r as WithShippingWrapped).data : (r as WithShippingData);
+      if (!payload?.summary || !payload?.shipping) throw new Error("Formato inesperado en /cart/with-shipping");
       setWithShip(payload);
-
-      // opcional: pre-seleccionar primera tarifa
       setSelectedRate(payload.shipping.rates?.[0] ?? null);
-
-      // opcional: rellenar campos de envío si vinieron desde el back
       if (payload.shipping.address) {
         setShipCity(payload.shipping.address.city ?? "");
         setShipZip(payload.shipping.address.postal_code ?? "");
         setShipCountry(payload.shipping.address.country ?? "");
       }
-    } catch (e: any) {
-      setWithShip(null);
-      setSelectedRate(null);
-      setWithShipErr(e?.message || "No se pudo obtener carrito con envío");
-    } finally {
-      setWithShipLoading(false);
-    }
+    } catch (e: any) { setWithShip(null); setSelectedRate(null); setWithShipErr(e?.message || "No se pudo obtener carrito con envío"); }
+    finally { setWithShipLoading(false); }
   }
 
-
-  // 🔹 NUEVO: validar cupón sin aplicarlo
   async function handleValidateCoupon(e: React.FormEvent) {
     e.preventDefault();
     setCouponValidation(null);
     if (!couponCode.trim()) return;
     setCouponValidating(true);
-    try {
-      const res = await validateCoupon(couponCode.trim());
-      setCouponValidation(res);
-    } catch (e: any) {
-      setCouponValidation({ valid: false, message: e?.message || "No se pudo validar el cupón" });
-    } finally {
-      setCouponValidating(false);
-    }
+    try { const res = await validateCoupon(couponCode.trim()); setCouponValidation(res); }
+    catch (e: any) { setCouponValidation({ valid: false, message: e?.message || "No se pudo validar el cupón" }); }
+    finally { setCouponValidating(false); }
   }
 
   async function loadCartTotal() {
-    setCartTotalLoading(true);
-    setCartTotalErr(null);
+    setCartTotalLoading(true); setCartTotalErr(null);
     try {
       const r = await apiFetch<CartTotalResponse>(`/cart/total`, { method: "GET" });
       const payload: CartTotalData =
-        (r as CartTotalWrapped)?.success === true
-          ? (r as CartTotalWrapped).data
-          : (r as CartTotalData);
-
-      if (!payload || typeof payload.subtotal !== "number") {
-        throw new Error("Formato inesperado en /cart/total");
-      }
+        (r as CartTotalWrapped)?.success === true ? (r as CartTotalWrapped).data : (r as CartTotalData);
+      if (!payload || typeof payload.subtotal !== "number") throw new Error("Formato inesperado en /cart/total");
       setCartTotalSummary(payload);
-    } catch (e: any) {
-      setCartTotalSummary(null);
-      setCartTotalErr(e?.message || "No se pudo obtener /cart/total");
-    } finally {
-      setCartTotalLoading(false);
-    }
+    } catch (e: any) { setCartTotalSummary(null); setCartTotalErr(e?.message || "No se pudo obtener /cart/total"); }
+    finally { setCartTotalLoading(false); }
   }
 
-
-  // 🔹 NUEVO: calcular descuentos con /promotions/apply-discounts (sobre el carrito actual)
   async function handleApplyPromotions(e: React.FormEvent) {
     e.preventDefault();
-    setPromoCalc(null);
-    setPromoCalcErr(null);
-    setPromoCalcLoading(true);
+    setPromoCalc(null); setPromoCalcErr(null); setPromoCalcLoading(true);
     try {
       const { cartItems, totalAmount } = buildApplyDiscountsPayload(items);
-      const res = await applyDiscounts({
-        couponCode: couponCode.trim() || undefined,
-        cartItems,
-        totalAmount,
-      });
+      const res = await applyDiscounts({ couponCode: couponCode.trim() || undefined, cartItems, totalAmount });
       setPromoCalc(res);
-    } catch (e: any) {
-      setPromoCalc(null);
-      setPromoCalcErr(e?.message || "No se pudieron aplicar los descuentos");
-    } finally {
-      setPromoCalcLoading(false);
-    }
+    } catch (e: any) { setPromoCalc(null); setPromoCalcErr(e?.message || "No se pudieron aplicar los descuentos"); }
+    finally { setPromoCalcLoading(false); }
   }
-
 
   async function handleSaveShippingAddress(e: React.FormEvent) {
     e.preventDefault();
@@ -782,169 +522,77 @@ export default function CartPage() {
         province: addrProvince.trim(),
         notes: addrNotes.trim(),
       };
-
       const r = await apiFetch<SaveShippingAddressResponse>(`/cart/shipping/address`, {
         method: "POST",
         body: JSON.stringify(body),
       });
-
-      // Mensaje de éxito (usa el message de data o el superior)
-      const msg =
-        r?.data?.message || r?.message || "Dirección de envío guardada ✅";
+      const msg = r?.data?.message || (r as any)?.message || "Dirección de envío guardada ✅";
       setSaveAddrMsg(msg);
-
-      // (Opcional) sincronizá con los campos que usás para crear el pedido
-      // y con el addressId de tu cálculo de envío si te sirve.
-      setShipStreet(body.addressLine);
-      setShipCity(body.city);
-      setShipZip(body.postalCode);
-      setShipCountry((r?.data?.shippingAddress?.country as string) || "MX");
-
-      // Si querés refrescar carrito completo:
-      // await loadCart();
+      setShipStreet(body.addressLine); setShipCity(body.city); setShipZip(body.postalCode);
+      setShipCountry((r?.data as any)?.shippingAddress?.country || "MX");
     } catch (e: any) {
       const m = e?.message || "No se pudo guardar la dirección";
       setSaveAddrMsg(m);
-      if (m.toLowerCase().includes("no autenticado")) {
-        window.location.href = "/auth?redirectTo=/carrito";
-      }
-    } finally {
-      setSavingAddr(false);
-    }
+      if (m.toLowerCase().includes("no autenticado")) { window.location.href = "/auth?redirectTo=/carrito"; }
+    } finally { setSavingAddr(false); }
   }
-
 
   function money(n?: number, ccy?: string) {
     if (typeof n !== "number") return "";
-    const code = ccy || "ARS"; // default
-    try {
-      return new Intl.NumberFormat("es-AR", { style: "currency", currency: code }).format(n);
-    } catch {
-      return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(n);
-    }
+    const code = ccy || "ARS";
+    try { return new Intl.NumberFormat("es-AR", { style: "currency", currency: code }).format(n); }
+    catch { return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(n); }
   }
+
   async function loadCartSummaryPlain() {
-    setPlainSummaryLoading(true);
-    setPlainSummaryErr(null);
+    setPlainSummaryLoading(true); setPlainSummaryErr(null);
     try {
       const r = await apiFetch<CartSummaryPlainWrapped | CartSummaryPlain>(`/cart/summary`, { method: "GET" });
       const payload: CartSummaryPlain =
-        (r as CartSummaryPlainWrapped)?.success === true
-          ? (r as CartSummaryPlainWrapped).data
-          : (r as CartSummaryPlain);
-
-      if (!payload || typeof payload.subtotal !== "number") {
-        throw new Error("Formato inesperado en /cart/summary");
-      }
+        (r as CartSummaryPlainWrapped)?.success === true ? (r as CartSummaryPlainWrapped).data : (r as CartSummaryPlain);
+      if (!payload || typeof payload.subtotal !== "number") throw new Error("Formato inesperado en /cart/summary");
       setPlainSummary(payload);
-    } catch (e: any) {
-      setPlainSummary(null);
-      setPlainSummaryErr(e?.message || "No se pudo obtener el resumen");
-    } finally {
-      setPlainSummaryLoading(false);
-    }
+    } catch (e: any) { setPlainSummary(null); setPlainSummaryErr(e?.message || "No se pudo obtener el resumen"); }
+    finally { setPlainSummaryLoading(false); }
   }
-
 
   function normalizeCart(resp: CartResponse): CartData {
-    // Acepta {success,data} o plano
     const payload: any = (resp as any)?.success === true ? (resp as any).data : resp;
-
-    // En tu backend actual los items viven en data.cartSummary.items
     const summary = payload?.cartSummary || {};
-    const rawItems: any[] = Array.isArray(summary.items)
-      ? summary.items
-      : (Array.isArray(payload?.items) ? payload.items : []);
-
+    const rawItems: any[] = Array.isArray(summary.items) ? summary.items : (Array.isArray(payload?.items) ? payload.items : []);
     const normalizedItems: CartItem[] = rawItems.map((it: any) => {
-      // En /cart el id del item viene como cartItemId
       const itemId = it.cartItemId || it._id || it.id || it.itemId || "";
-
-      // Si no viene objeto product, lo armamos con productId y productName
       const hasProductObject = !!it.product;
       const productObj: CartProduct = hasProductObject
-        ? {
-            _id: it.product._id ?? it.productId ?? undefined,
-            name: it.product.name ?? it.productName ?? undefined,
-            ...it.product,
-          }
-        : {
-            _id: it.productId,
-            name: it.productName,
-          };
-
-      // price/subtotal pueden no venir; calculamos subtotal si es necesario
-      const price =
-        typeof it.price === "number"
-          ? it.price
-          : (typeof it.originalPrice === "number" ? it.originalPrice : undefined);
-
+        ? { _id: it.product._id ?? it.productId ?? undefined, name: it.product.name ?? it.productName ?? undefined, ...it.product }
+        : { _id: it.productId, name: it.productName };
+      const price = typeof it.price === "number" ? it.price : (typeof it.originalPrice === "number" ? it.originalPrice : undefined);
       const quantity = Number(it.quantity) || 1;
-      const subtotal =
-        typeof it.subtotal === "number"
-          ? it.subtotal
-          : (typeof price === "number" ? price * quantity : undefined);
-
-      return {
-        _id: String(itemId),
-        product: productObj,
-        quantity,
-        size: it.size ?? null,
-        color: it.color ?? null,
-        price,
-        subtotal,
-      };
+      const subtotal = typeof it.subtotal === "number" ? it.subtotal : (typeof price === "number" ? price * quantity : undefined);
+      return { _id: String(itemId), product: productObj, quantity, size: it.size ?? null, color: it.color ?? null, price, subtotal };
     });
-
-    // Totales: tomamos del summary y del nivel raíz (finalTotal)
-    const totalItems =
-      typeof summary.totalItems === "number"
-        ? summary.totalItems
-        : (typeof payload?.totalItems === "number" ? payload.totalItems : undefined);
-
-    const total =
-      typeof summary.estimatedTotal === "number"
-        ? summary.estimatedTotal
-        : (typeof payload?.total === "number" ? payload.total : undefined);
-
-    const finalTotal =
-      typeof payload?.finalTotal === "number"
-        ? payload.finalTotal
-        : (typeof summary?.estimatedTotal === "number" ? summary.estimatedTotal : undefined);
-
-    return {
-      _id: payload?._id,
-      userId: payload?.userId,
-      items: normalizedItems,
-      total,
-      totalItems,
-      discounts: Array.isArray(payload?.discounts) ? payload.discounts : undefined,
-      finalTotal,
-    };
+    const totalItems = typeof summary.totalItems === "number" ? summary.totalItems
+      : (typeof payload?.totalItems === "number" ? payload.totalItems : undefined);
+    const total = typeof summary.estimatedTotal === "number" ? summary.estimatedTotal
+      : (typeof payload?.total === "number" ? payload.total : undefined);
+    const finalTotal = typeof payload?.finalTotal === "number" ? payload.finalTotal
+      : (typeof summary?.estimatedTotal === "number" ? summary.estimatedTotal : undefined);
+    return { _id: payload?._id, userId: payload?.userId, items: normalizedItems, total, totalItems, discounts: Array.isArray(payload?.discounts) ? payload.discounts : undefined, finalTotal };
   }
 
-
   async function loadCart() {
-    setLoading(true);
-    setErr(null);
+    setLoading(true); setErr(null);
     try {
       const r = await apiFetch<CartResponse>("/cart", { method: "GET" });
       const cart = normalizeCart(r);
-
       setItems(cart.items || []);
       setCartId(cart._id ?? null);
       setCartTotal(cart.total ?? null);
       setCartTotalItems(cart.totalItems ?? null);
       setCartDiscounts(cart.discounts ?? []);
       setCartFinalTotal(cart.finalTotal ?? null);
-
       const next: Record<string, { quantity: number; size: string }> = {};
-      (cart.items || []).forEach((it) => {
-        next[it._id] = {
-          quantity: Number(it.quantity) || 1,
-          size: (it.size ?? "").toString(),
-        };
-      });
+      (cart.items || []).forEach((it) => { next[it._id] = { quantity: Number(it.quantity) || 1, size: (it.size ?? "").toString() }; });
       setEdits(next);
     } catch (e: any) {
       const msg = e?.message || "Error al cargar el carrito";
@@ -952,238 +600,115 @@ export default function CartPage() {
       if (msg.toLowerCase().includes("no autenticado") || msg.toLowerCase().includes("credenciales")) {
         window.location.href = "/auth?redirectTo=/carrito";
       }
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }
-
-  useEffect(() => {
-    loadCart();
-  }, []);
+  useEffect(() => { loadCart(); }, []);
 
   async function loadCartSummary(withCoupon?: string) {
-    setSummaryLoading(true);
-    setSummaryErr(null);
+    setSummaryLoading(true); setSummaryErr(null);
     try {
       const qs = withCoupon ? `?couponCode=${encodeURIComponent(withCoupon)}` : "";
       const r = await apiFetch<CartSummaryWithDiscountsResponse>(`/cart/summary-with-discounts${qs}`, { method: "GET" });
-
       const payload: CartSummaryWithDiscountsData =
-        (r as CartSummaryWithDiscountsWrapped)?.success === true
-          ? (r as CartSummaryWithDiscountsWrapped).data
-          : (r as CartSummaryWithDiscountsData);
-
-      if (!payload?.cartSummary) {
-        throw new Error("Formato inesperado en /cart/summary-with-discounts");
-      }
-
-      // Nuevo summary "v2"
+        (r as CartSummaryWithDiscountsWrapped)?.success === true ? (r as CartSummaryWithDiscountsWrapped).data : (r as CartSummaryWithDiscountsData);
+      if (!payload?.cartSummary) throw new Error("Formato inesperado en /cart/summary-with-discounts");
       setSummaryV2(payload);
-
-      // Evito que choque con el render viejo (lo dejamos en null)
       setSummary(null);
-    } catch (e: any) {
-      setSummaryV2(null);
-      setSummaryErr(e?.message || "No se pudo obtener el resumen con descuentos");
-    } finally {
-      setSummaryLoading(false);
-    }
+    } catch (e: any) { setSummaryV2(null); setSummaryErr(e?.message || "No se pudo obtener el resumen con descuentos"); }
+    finally { setSummaryLoading(false); }
   }
 
-  /* ===== NUEVO: aplicar cupón por POST /cart/apply-coupon con fallback ===== */
   async function handleApplyCoupon(e: React.FormEvent) {
     e.preventDefault();
-    setSummaryLoading(true);
-    setSummaryErr(null);
-    setCouponResult(null);
-    setSummary(null); // limpiamos el otro resumen para no mezclar pantallas
+    setSummaryLoading(true); setSummaryErr(null); setCouponResult(null); setSummary(null);
     try {
       const body: Record<string, any> = {};
       if (couponCode.trim()) body.couponCode = couponCode.trim();
-      // si tu back necesita cartId o userId, podés agregarlos acá
-      const res = await apiFetch<ApplyCouponResponse>(`/cart/apply-coupon`, {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
+      const res = await apiFetch<ApplyCouponResponse>(`/cart/apply-coupon`, { method: "POST", body: JSON.stringify(body) });
       setCouponResult(res);
     } catch (err: any) {
-      // fallback a tu endpoint anterior
       await loadCartSummary(couponCode.trim() || undefined);
       setSummaryErr((prev) => prev || err?.message || "No se pudo aplicar el cupón");
-    } finally {
-      setSummaryLoading(false);
-    }
+    } finally { setSummaryLoading(false); }
   }
 
-  /* ===== Add / Update / Remove ===== */
   async function handleAddToCart(e: React.FormEvent) {
     e.preventDefault();
-    setAddMsg(null);
-    setAdding(true);
+    setAddMsg(null); setAdding(true);
     try {
-      const payload: Record<string, any> = {
-        productId: addProductId.trim(),
-        quantity: Number(addQty) || 1,
-      };
-      const s = addSize.trim();
-      const c = addColor.trim();
-      if (s) payload.size = s;
-      if (c) payload.color = c;
-
-      const r = await apiFetch<AddToCartResponse | CartResponse>("/cart/add", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-
+      const payload: Record<string, any> = { productId: addProductId.trim(), quantity: Number(addQty) || 1 };
+      const s = addSize.trim(); const c = addColor.trim();
+      if (s) payload.size = s; if (c) payload.color = c;
+      const r = await apiFetch<AddToCartResponse | CartResponse>("/cart/add", { method: "POST", body: JSON.stringify(payload) });
       if ((r as AddToCartResponse)?.cartTotal !== undefined) {
         const ar = r as AddToCartResponse;
         setCartTotal(ar.cartTotal);
         setAddMsg(ar.message || "Producto agregado 👍");
-      } else {
-        setAddMsg("Producto agregado 👍");
-      }
-
+      } else { setAddMsg("Producto agregado 👍"); }
       await loadCart();
       setAddQty(1);
-    } catch (e: any) {
-      const msg = e?.message || "No se pudo agregar";
-      setAddMsg(msg);
-    } finally {
-      setAdding(false);
-    }
+    } catch (e: any) { const msg = e?.message || "No se pudo agregar"; setAddMsg(msg); }
+    finally { setAdding(false); }
   }
 
   async function handleUpdateItem(itemId: string) {
-    setUpdateMsg(null);
-    setUpdatingId(itemId);
+    setUpdateMsg(null); setUpdatingId(itemId);
     try {
       const current = edits[itemId] || { quantity: 1, size: "" };
       const q = Math.max(1, Math.floor(Number(current.quantity) || 1));
-
-      const r = await apiFetch<UpdateCartItemResponse | CartResponse>(`/cart/${itemId}`, {
-        method: "PUT",
-        body: JSON.stringify({ quantity: q }),
-      });
-
+      const r = await apiFetch<UpdateCartItemResponse | CartResponse>(`/cart/${itemId}`, { method: "PUT", body: JSON.stringify({ quantity: q }) });
       if ((r as any)?.cartItem && (r as any)?.cartTotal !== undefined) {
         const ur = r as UpdateCartItemResponse;
         setCartTotal(ur.cartTotal);
         setItems((prev) =>
-          prev.map((it) =>
-            it._id === ur.cartItem._id
-              ? { ...it, quantity: ur.cartItem.quantity, subtotal: ur.cartItem.subtotal }
-              : it
-          )
-        );
+          prev.map((it) => it._id === ur.cartItem._id ? { ...it, quantity: ur.cartItem.quantity, subtotal: ur.cartItem.subtotal } : it));
         setUpdateMsg(ur.message || "Ítem actualizado ✅");
-      } else {
-        setUpdateMsg("Ítem actualizado ✅");
-      }
-
+      } else { setUpdateMsg("Ítem actualizado ✅"); }
       await loadCart();
-    } catch (e: any) {
-      setUpdateMsg(e?.message || "No se pudo actualizar el ítem");
-    } finally {
-      setUpdatingId(null);
-    }
+    } catch (e: any) { setUpdateMsg(e?.message || "No se pudo actualizar el ítem"); }
+    finally { setUpdatingId(null); }
   }
 
   async function handleRemoveItem(itemId: string) {
-    setRemoveMsg(null);
-    setRemovingId(itemId);
+    setRemoveMsg(null); setRemovingId(itemId);
     try {
-      // 👇 endpoint correcto
-      const r = await apiFetch<RemoveCartItemResponse | CartResponse>(`/cart/remove/${itemId}`, {
-        method: "DELETE",
-      });
-
-      // Soporta ambos shapes: {success,data} o plano
+      const r = await apiFetch<RemoveCartItemResponse | CartResponse>(`/cart/remove/${itemId}`, { method: "DELETE" });
       const cart = normalizeCart(r as any);
-
-      // Estado desde servidor
       setItems(cart.items || []);
       setCartId(cart._id ?? null);
       setCartTotal(cart.total ?? null);
       setCartTotalItems(cart.totalItems ?? (cart.items?.length ?? 0));
       setCartDiscounts(cart.discounts ?? []);
       setCartFinalTotal(cart.finalTotal ?? null);
-
-      // Sincronizar los controles de edición
       const next: Record<string, { quantity: number; size: string }> = {};
-      (cart.items || []).forEach((it) => {
-        next[it._id] = { quantity: Number(it.quantity) || 1, size: (it.size ?? "").toString() };
-      });
+      (cart.items || []).forEach((it) => { next[it._id] = { quantity: Number(it.quantity) || 1, size: (it.size ?? "").toString() }; });
       setEdits(next);
-
       setRemoveMsg(("message" in (r as any) && (r as any).message) || "Ítem eliminado 🗑️");
     } catch (e: any) {
       setRemoveMsg(e?.message || "No se pudo eliminar el ítem");
       if (String(e?.message || "").toLowerCase().includes("no autenticado")) {
         window.location.href = "/auth?redirectTo=/carrito";
       }
-    } finally {
-      setRemovingId(null);
-    }
-  }
-
-  // 🆕 Vaciar carrito (DELETE /cart/clear)
-  async function handleClearCart() {
-    setClearMsg(null);
-    setClearing(true);
-    try {
-      const r = await apiFetch<ClearCartResponse>(`/cart/clear`, { method: "DELETE" }); // 👈 DELETE
-
-      // Estado optimista
-      setItems([]);
-      setCartTotal(0);
-      setCartTotalItems(0);
-      setCartDiscounts([]);
-      setCartFinalTotal(0);
-
-      // Limpiar vistas auxiliares
-      setCouponResult(null);
-      setSummary(null);
-      setPromoCalc(null);
-      setSummaryErr(null);
-
-      // (opcional) si preferís 100% server-truth:
-      // await loadCart();
-
-      setClearMsg(r?.message ?? "Carrito vaciado 🧹");
-    } catch (e: any) {
-      setClearMsg(e?.message || "No se pudo vaciar el carrito");
-      if (String(e?.message || "").toLowerCase().includes("no autenticado")) {
-        window.location.href = "/auth?redirectTo=/carrito";
-      }
-    } finally {
-      setClearing(false);
-    }
+    } finally { setRemovingId(null); }
   }
 
   // 🆕 MP: pagar directo desde /carrito (crea preferencia y redirige)
   async function handlePayWithMercadoPago() {
     setPayMsg(null);
-
-    if (items.length === 0) {
-      setPayMsg("El carrito está vacío");
-      return;
-    }
-
+    if (items.length === 0) { setPayMsg("El carrito está vacío"); return; }
     try {
       setPayingMp(true);
-
-      const origin =
-        typeof window !== "undefined" ? window.location.origin : (process.env.NEXT_PUBLIC_SITE_BASE || "");
+      const origin = typeof window !== "undefined" ? window.location.origin : (process.env.NEXT_PUBLIC_SITE_BASE || "");
       const successUrl = `${origin}/payments/mercadopago/return?source=checkout`;
       const failureUrl = `${origin}/payments/mercadopago/return?source=checkout`;
       const pendingUrl = `${origin}/payments/mercadopago/return?source=checkout`;
-
       const pref = await createMercadoPagoCheckout({ successUrl, failureUrl, pendingUrl });
-      const redirectUrl = (pref as any)?.init_point || (pref as any)?.sandbox_init_point;
 
+      // 👇 nuevo: normalizar respuesta
+      console.debug("MP checkout resp:", pref);
+      const redirectUrl = getMpRedirectUrl(pref);
       if (!redirectUrl) throw new Error("No se recibió la URL de pago");
 
-      // redirigimos a MP
       window.location.href = redirectUrl;
     } catch (e: any) {
       const m = String(e?.message || "No se pudo iniciar el pago con Mercado Pago");
@@ -1191,76 +716,55 @@ export default function CartPage() {
       if (m.toLowerCase().includes("no autenticado") || m.toLowerCase().includes("credenciales")) {
         router.push(`/auth?redirectTo=/carrito`);
       }
-    } finally {
-      setPayingMp(false);
-    }
+    } finally { setPayingMp(false); }
+  }
+
+  async function handleClearCart() {
+    setClearMsg(null); setClearing(true);
+    try {
+      const r = await apiFetch<ClearCartResponse>(`/cart/clear`, { method: "DELETE" });
+      setItems([]); setCartTotal(0); setCartTotalItems(0); setCartDiscounts([]); setCartFinalTotal(0);
+      setCouponResult(null); setSummary(null); setPromoCalc(null); setSummaryErr(null);
+      setClearMsg(r?.message ?? "Carrito vaciado 🧹");
+    } catch (e: any) {
+      setClearMsg(e?.message || "No se pudo vaciar el carrito");
+      if (String(e?.message || "").toLowerCase().includes("no autenticado")) {
+        window.location.href = "/auth?redirectTo=/carrito";
+      }
+    } finally { setClearing(false); }
   }
 
   async function handleCreateOrder(e: React.FormEvent) {
     e.preventDefault();
-    setOrderMsg(null);
-    setOrderCreated(null);
-
-    if (!cartId) {
-      setOrderMsg("No se encontró un carrito para el usuario");
-      return;
-    }
-    if (!items.length) {
-      setOrderMsg("El carrito está vacío");
-      return;
-    }
+    setOrderMsg(null); setOrderCreated(null);
+    if (!cartId) { setOrderMsg("No se encontró un carrito para el usuario"); return; }
+    if (!items.length) { setOrderMsg("El carrito está vacío"); return; }
     if (!shipStreet.trim() || !shipCity.trim() || !shipZip.trim() || !shipCountry.trim()) {
-      setOrderMsg("Completá la dirección de envío.");
-      return;
+      setOrderMsg("Completá la dirección de envío."); return;
     }
-
     const body: CreateOrderBody = {
       cartId,
-      items: items.map((it) => ({
-        itemId: it._id,
-        quantity: Math.max(1, Number(edits[it._id]?.quantity ?? it.quantity) || 1),
-      })),
-      shippingAddress: {
-        street: shipStreet.trim(),
-        city: shipCity.trim(),
-        zip: shipZip.trim(),
-        country: shipCountry.trim(),
-      },
+      items: items.map((it) => ({ itemId: it._id, quantity: Math.max(1, Number(edits[it._id]?.quantity ?? it.quantity) || 1) })),
+      shippingAddress: { street: shipStreet.trim(), city: shipCity.trim(), zip: shipZip.trim(), country: shipCountry.trim() },
     };
-
     setCreatingOrder(true);
     try {
-      const r = await apiFetch<CreateOrderResponse>("/orders", {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
-
-      if (!("success" in r) || !r.success) {
-        throw new Error(("message" in r && r.message) || "No se pudo crear el pedido");
-      }
-
-      setOrderCreated(r.data);
-      setOrderMsg("Pedido creado ✅");
-
-      // ⭐ Redirección al detalle del pedido recién creado
+      const r = await apiFetch<CreateOrderResponse>("/orders", { method: "POST", body: JSON.stringify(body) });
+      if (!("success" in r) || !r.success) throw new Error(("message" in r && r.message) || "No se pudo crear el pedido");
+      setOrderCreated(r.data); setOrderMsg("Pedido creado ✅");
       const newOrderId = (r as any)?.data?._id;
       router.push(newOrderId ? `/pedidos/${newOrderId}` : `/pedidos`);
-
       await loadCart();
     } catch (e: any) {
       setOrderMsg(e?.message || "No se pudo crear el pedido");
       if (String(e?.message || "").toLowerCase().includes("no autenticado")) {
         window.location.href = "/auth?redirectTo=/carrito";
       }
-    } finally {
-      setCreatingOrder(false);
-    }
+    } finally { setCreatingOrder(false); }
   }
 
-  const derivedTotalItems = useMemo(
-    () => items.reduce((acc, it) => acc + (Number(it.quantity) || 0), 0),
-    [items]
-  );
+  const derivedTotalItems = useMemo(() => items.reduce((acc, it) => acc + (Number(it.quantity) || 0), 0), [items]);
+
 
   return (
     <main className={s.page} style={{ maxWidth: 960, margin: "24px auto", padding: "0 16px" }}>
@@ -1427,7 +931,7 @@ export default function CartPage() {
         </button>
         {cartTotalErr && <span style={{ color: "crimson" }}>{cartTotalErr}</span>}
 
-        <button
+        {/*<button
           onClick={loadCartWithShipping}
           disabled={withShipLoading}
           className={s.btn}
@@ -1443,6 +947,7 @@ export default function CartPage() {
         >
           {withShipLoading ? "Cargando…" : "Carrito + envío"}
         </button>
+        */}
         {withShipErr && <span style={{ color: "crimson" }}>{withShipErr}</span>}
 
         {cartValidate && (
@@ -1591,7 +1096,7 @@ export default function CartPage() {
         </div>
       )}
 
-      {/* 🔹 NUEVO: listado simple de promos activas */}
+      {/* 
       <section className={s.card}
         style={{
           margin: "8px 0 12px",
@@ -1625,7 +1130,8 @@ export default function CartPage() {
           </ul>
         )}
       </section>
-
+      🔹 NUEVO: listado simple de promos activas */}
+ {/*
       <section className={s.card}
         style={{
           margin: "8px 0 12px",
@@ -1635,7 +1141,7 @@ export default function CartPage() {
           background: "#fff",
         }}
       >
-        <h3 style={{ margin: 0, fontSize: 16, marginBottom: 8 }}>
+       <h3 style={{ margin: 0, fontSize: 16, marginBottom: 8 }}>
           Dirección de envío (guardar en carrito)
         </h3>
 
@@ -1728,8 +1234,8 @@ export default function CartPage() {
           </div>
         </form>
       </section>
-
-      {/* 🔹 NUEVO: Estimá tu envío */}
+*/}
+      {/* 
       <section className={s.card}
         style={{
           margin: "8px 0 12px",
@@ -1784,7 +1290,7 @@ export default function CartPage() {
           </div>
         )}
       </section>
-
+🔹 NUEVO: Estimá tu envío */}
       {/* Lista de ítems */}
       {!loading && items.length > 0 && (
         <div className={s.items} style={{ display: "grid", gap: 12 }}>
@@ -2269,7 +1775,7 @@ export default function CartPage() {
             background: "#fff",
           }}
         >
-          <h2 style={{ fontSize: 18, marginTop: 0, marginBottom: 10 }}>Datos de envío</h2>
+         {/* <h2 style={{ fontSize: 18, marginTop: 0, marginBottom: 10 }}>Datos de envío</h2>
 
           <form onSubmit={handleCreateOrder} style={{ display: "grid", gap: 8 }}>
             <div className={s.grid2} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -2345,7 +1851,7 @@ export default function CartPage() {
               )}
             </div>
           </form>
-
+*/}
           {orderCreated && (
             <div
               style={{

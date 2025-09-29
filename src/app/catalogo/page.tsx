@@ -19,6 +19,30 @@ function currency(n?: number) {
   return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(n);
 }
 
+/* 🔹 NUEVO: helpers de precio con descuento */
+function hasDiscount(p: ProductDto) {
+  const fp = (p as any).finalPrice as number | undefined;
+  const base = typeof p.price === "number" ? p.price : (p as any).originalPrice;
+  return typeof fp === "number" && typeof base === "number" && fp < base;
+}
+function basePrice(p: ProductDto) {
+  return typeof p.price === "number" ? p.price : (p as any).originalPrice;
+}
+function displayPrice(p: ProductDto) {
+  // Si hay finalPrice menor al base, mostrarlo; si no, mostrar price/originalPrice
+  const fp = (p as any).finalPrice as number | undefined;
+  if (hasDiscount(p) && typeof fp === "number") return fp;
+  return basePrice(p);
+}
+function discountPercent(p: ProductDto) {
+  const b = basePrice(p);
+  const f = (p as any).finalPrice as number | undefined;
+  if (typeof b === "number" && typeof f === "number" && f < b) {
+    return Math.round((1 - f / b) * 100);
+  }
+  return 0;
+}
+
 export default function CatalogoPage() {
   const router = useRouter();
   const pathname = usePathname();
@@ -48,15 +72,25 @@ export default function CatalogoPage() {
     setAddMsgById((m) => ({ ...m, [id]: msg }));
   }
 
-  // 🔎 Estado controlado para búsqueda en tiempo real
+  // 🔎 Estado controlado para búsqueda en tiempo real (texto general)
   const [searchTerm, setSearchTerm] = useState<string>(sp.get("search") ?? "");
+  // 🆕 Estado controlado para la categoría en tiempo real
+  const [categoryTerm, setCategoryTerm] = useState<string>(sp.get("category") ?? "");
+  // 🆕 Estado controlado para talle/size en tiempo real
+  const [sizeTerm, setSizeTerm] = useState<string>(sp.get("size") ?? "");
 
-  // Mantener input sincronizado si cambian los params (back/forward)
+  // Mantener inputs sincronizados si cambian los params (back/forward)
   useEffect(() => {
-    const current = sp.get("search") ?? "";
-    setSearchTerm((prev) => (prev === current ? prev : current));
+    const currentSearch = sp.get("search") ?? "";
+    setSearchTerm((prev) => (prev === currentSearch ? prev : currentSearch));
+
+    const currentCategory = sp.get("category") ?? "";
+    setCategoryTerm((prev) => (prev === currentCategory ? prev : currentCategory));
+
+    const currentSize = sp.get("size") ?? "";
+    setSizeTerm((prev) => (prev === currentSize ? prev : currentSize));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sp]); // leer sp, no agregar setters a deps
+  }, [sp]);
 
   const query = useMemo(() => {
     const page = Number(sp.get("page") || "1");
@@ -73,6 +107,18 @@ export default function CatalogoPage() {
     return { page, limit, category, search, minPrice, maxPrice, sortBy, sortOrder, isFeatured, isPreorder, size };
   }, [sp]);
 
+  /* 🆕 Query para el fetch que NO manda search/category/size al backend (fallback 100% front) */
+  const queryForFetch = useMemo(() => {
+    const q: any = { ...query };
+    if (q.search) q.__localSearch = q.search; // los guardo por si querés loguearlos
+    delete q.search;
+    if (q.category) q.__localCategory = q.category;
+    delete q.category;
+    if (q.size) q.__localSize = q.size;
+    delete q.size;
+    return q;
+  }, [query]);
+
   // Productos
   useEffect(() => {
     let abort = false;
@@ -81,7 +127,7 @@ export default function CatalogoPage() {
       setErr(null);
       setThumbs({});
       try {
-        const res = await fetchProducts(query);
+        const res = await fetchProducts(queryForFetch); // sin search/category/size
         if (abort) return;
         setData(res);
 
@@ -104,7 +150,7 @@ export default function CatalogoPage() {
       }
     })();
     return () => { abort = true; };
-  }, [query]);
+  }, [queryForFetch]);
 
   // Categorías
   useEffect(() => {
@@ -191,30 +237,79 @@ export default function CatalogoPage() {
     router.replace(`${pathname}?${usp.toString()}`);
   }
 
-  // Debounce 300ms para búsqueda en tiempo real
+  // Debounce 300ms para búsqueda en tiempo real (texto general)
   useEffect(() => {
     const id = setTimeout(() => {
-      // Actualiza la query string (dispara fetch) cuando el usuario dejó de tipear
-      setParam("search", searchTerm || undefined);
+      const sanitized = searchTerm.trim();
+      setParam("search", sanitized || undefined);
     }, 300);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm]);
 
+  // Debounce 300ms para categoría en tiempo real
+  useEffect(() => {
+    const id = setTimeout(() => {
+      const sanitized = categoryTerm.trim();
+      setParam("category", sanitized || undefined);
+    }, 300);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoryTerm]);
+
+  // 🆕 Debounce 300ms para talle en tiempo real
+  useEffect(() => {
+    const id = setTimeout(() => {
+      const sanitized = sizeTerm.trim();
+      setParam("size", sanitized || undefined);
+    }, 300);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sizeTerm]);
+
   const { products, total, page, totalPages } = data;
   const totalAll = cats.reduce((acc, c) => acc + (c.count || 0), 0);
+
+  /* 🆕 Filtrado en cliente por texto, categoría y talle */
+  const visibleProducts = useMemo(() => {
+    const termText = (searchTerm || "").trim().toLowerCase();
+    const termCat  = (categoryTerm || "").trim().toLowerCase();
+    const termSize = (sizeTerm || "").trim().toLowerCase();
+
+    return data.products.filter((p) => {
+      const matchesText = !termText
+        ? true
+        : [p.name, (p as any).description, p.category].filter(Boolean)
+            .some((v) => String(v).toLowerCase().includes(termText));
+
+      const matchesCat = !termCat
+        ? true
+        : String(p.category || "").toLowerCase().includes(termCat);
+
+      const matchesSize = !termSize
+        ? true
+        : Array.isArray(p.sizes)
+            ? p.sizes.some((sz) => String(sz).toLowerCase().includes(termSize))
+            : false;
+
+      return matchesText && matchesCat && matchesSize;
+    });
+  }, [data.products, searchTerm, categoryTerm, sizeTerm]);
+
+  /* cantidad mostrada considerando todos los filtros en cliente */
+  const shownCount = visibleProducts.length;
 
   return (
     <main className={s.page}>
       <header className={s.header}>
         <h1 className={s.title}>Catálogo</h1>
-        <p className={s.subtitle}>{total} resultados</p>
+        <p className={s.subtitle}>{shownCount} resultados</p>
       </header>
 
       {/* Chips de categorías */}
       <section className={s.chips}>
         <button
-          onClick={() => setParam("category", undefined)}
+          onClick={() => { setCategoryTerm(""); setParam("category", undefined); }}
           className={`${s.chip} ${!sp.get("category") ? s.chipActive : ""}`}
           title={`Todas${totalAll ? ` (${totalAll})` : ""}`}
         >
@@ -225,11 +320,11 @@ export default function CatalogoPage() {
         {!catsLoading && catsErr && <span className={s.error}>{catsErr}</span>}
 
         {!catsLoading && !catsErr && cats.map(c => {
-          const active = sp.get("category") === c.category;
+          const active = (sp.get("category") ?? "") === c.category;
           return (
             <button
               key={c.category}
-              onClick={() => setParam("category", c.category)}
+              onClick={() => { setCategoryTerm(c.category); setParam("category", c.category); }}
               className={`${s.chip} ${active ? s.chipActive : ""}`}
               title={`${c.category} (${c.count})`}
             >
@@ -275,8 +370,8 @@ export default function CatalogoPage() {
             onChange={(e) => setSearchTerm(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
-                // Fuerza búsqueda inmediata y quita el debounce
-                setParam("search", searchTerm || undefined);
+                const sanitized = searchTerm.trim();
+                setParam("search", sanitized || undefined);
                 (e.currentTarget as HTMLInputElement).blur();
               }
             }}
@@ -293,10 +388,62 @@ export default function CatalogoPage() {
           )}
         </div>
 
-        <input className={s.input} placeholder="Categoría (sandalias…)" defaultValue={sp.get("category") ?? ""} onBlur={(e) => setParam("category", e.target.value)} />
+        {/* Categoría en tiempo real */}
+        <div className={s.searchWrap}>
+          <input
+            className={`${s.input} ${s.searchInput}`}
+            placeholder="Categoría (sandalias…)"
+            value={categoryTerm}
+            onChange={(e) => setCategoryTerm(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                const sanitized = categoryTerm.trim();
+                setParam("category", sanitized || undefined);
+                (e.currentTarget as HTMLInputElement).blur();
+              }
+            }}
+          />
+          {!!categoryTerm && (
+            <button
+              type="button"
+              aria-label="Limpiar categoría"
+              className={s.clearBtn}
+              onClick={() => setCategoryTerm("")}
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
+        {/* 🆕 Talle en tiempo real */}
+        <div className={s.searchWrap}>
+          <input
+            className={`${s.input} ${s.searchInput}`}
+            placeholder="Talle (38, 40…)"
+            value={sizeTerm}
+            onChange={(e) => setSizeTerm(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                const sanitized = sizeTerm.trim();
+                setParam("size", sanitized || undefined);
+                (e.currentTarget as HTMLInputElement).blur();
+              }
+            }}
+          />
+          {!!sizeTerm && (
+            <button
+              type="button"
+              aria-label="Limpiar talle"
+              className={s.clearBtn}
+              onClick={() => setSizeTerm("")}
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
         <input className={s.input} type="number" placeholder="Precio mín." defaultValue={sp.get("minPrice") ?? ""} onBlur={(e) => setParam("minPrice", e.target.value)} />
         <input className={s.input} type="number" placeholder="Precio máx." defaultValue={sp.get("maxPrice") ?? ""} onBlur={(e) => setParam("maxPrice", e.target.value)} />
-        <input className={s.input} placeholder="Talle (38, 40…)" defaultValue={sp.get("size") ?? ""} onBlur={(e) => setParam("size", e.target.value)} />
 
         <select className={s.select} defaultValue={sp.get("sortBy") ?? ""} onChange={(e) => setParam("sortBy", e.target.value || undefined)}>
           <option value="">Ordenar por…</option>
@@ -340,8 +487,13 @@ export default function CatalogoPage() {
       {!loading && !err && (
         <>
           <div className={s.grid}>
-            {data.products.map(p => {
+            {visibleProducts.map(p => {
               const needsSizeSelection = Array.isArray(p.sizes) && p.sizes.length > 1;
+              const isOff = hasDiscount(p);
+              const base = basePrice(p);
+              const show = displayPrice(p);
+              const off = discountPercent(p);
+
               return (
                 <article key={p._id} className={s.card}>
                   <a href={`/producto/${p._id}`} aria-label={p.name} className={s.thumbLink}>
@@ -356,7 +508,19 @@ export default function CatalogoPage() {
                   </a>
 
                   <h3 className={s.cardTitle}>{p.name}</h3>
-                  <div className={s.cardPrice}>{currency(p.price)}</div>
+
+                  <div className={s.cardPrice}>
+                    {isOff && typeof base === "number" ? (
+                      <>
+                        <span className={s.oldPrice}>{currency(base)}</span>
+                        <span className={s.newPrice}>{currency(show)}</span>
+                        {off > 0 && <span className={s.discountBadge}>-{off}%</span>}
+                      </>
+                    ) : (
+                      <>{currency(show)}</>
+                    )}
+                  </div>
+
                   {p.category && <div className={s.cardCat}>{p.category}</div>}
 
                   {needsSizeSelection && (

@@ -144,17 +144,17 @@ export default function ProductDetail() {
     <main className={s.page}>
       <div className={s.grid}>
         {/* Galería */}
-        <section className={s.gallery}>
-          {!!imgs.length && imgs.map((src, i) => (
-            <img
-              key={src + i}
-              src={src}
-              alt={`${p.name} ${i + 1}`}
-              className={s.galleryImg}
-              loading="lazy"
-            />
-          ))}
-        </section>
+      <section className={`${s.gallery} ${imgs.length === 1 ? s.gallerySingle : ""}`}>
+  {!!imgs.length && imgs.map((src, i) => (
+    <img
+      key={src + i}
+      src={src}
+      alt={`${p.name} ${i + 1}`}
+      className={s.galleryImg}
+      loading="lazy"
+    />
+  ))}
+</section>
 
         {/* Buy card (sticky en desktop) */}
         <aside className={s.buyCard}>

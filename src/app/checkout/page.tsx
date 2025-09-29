@@ -1,144 +1,112 @@
-// src/app/checkout/page.tsx
 "use client";
-
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createOrder, CreateOrderBody } from "@/lib/ordersApi";
-import { createOrderWithShipping } from "@/lib/ordersApi"; // ⬇️ ya lo tenías
-import { createMercadoPagoCheckout } from "@/lib/paymentsApi"; // ⬅️ NUEVO
-
-import { calculateShipping, type ShippingOption } from "@/lib/shippingApi"; // 🔹 NUEVO
+import { createOrderWithShipping } from "@/lib/ordersApi";
+import { createMercadoPagoCheckout } from "@/lib/paymentsApi";
+import { calculateShipping, type ShippingOption } from "@/lib/shippingApi";
 
 function Label({ children }: { children: React.ReactNode }) {
-return <span style={{ fontSize: 13, opacity: 0.85 }}>{children}</span>;
+  return <span style={{ fontSize: 13, opacity: 0.85 }}>{children}</span>;
+}
+
+/* ===== Helper para normalizar URL de redirección de MP ===== */
+function getMpRedirectUrl(resp: any): string | undefined {
+  const r = resp ?? {};
+  const d = r.data ?? {};
+  return (
+    r.init_point ||
+    r.sandbox_init_point ||
+    r.approvalUrl ||
+    r.paymentUrl ||
+    d.init_point ||
+    d.sandbox_init_point ||
+    d.approvalUrl ||
+    d.paymentUrl ||
+    d.pointOfInteraction?.transactionData?.ticket_url ||
+    undefined
+  );
 }
 
 export default function CheckoutPage() {
-const router = useRouter();
-const [shippingAddressId, setShippingAddressId] = useState("");
-const [paymentMethod, setPaymentMethod] = useState<"paypal" | "stripe" | "mercadopago" | "cash" | string>("paypal");
-const [couponCode, setCouponCode] = useState("");
-const [shippingMethod, setShippingMethod] = useState<"standard" | "express" | string>("standard");
+  const router = useRouter();
+  const [shippingAddressId, setShippingAddressId] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<"paypal" | "stripe" | "mercadopago" | "cash" | string>("paypal");
+  const [couponCode, setCouponCode] = useState("");
+  const [shippingMethod, setShippingMethod] = useState<"standard" | "express" | string>("standard");
+  const [submitting, setSubmitting] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [notes, setNotes] = useState("");
+  const [submittingShipping, setSubmittingShipping] = useState(false);
 
-const [submitting, setSubmitting] = useState(false);
-const [msg, setMsg] = useState<string | null>(null);
+  const [shipOpts, setShipOpts] = useState<ShippingOption[] | null>(null);
+  const [shipCalcLoading, setShipCalcLoading] = useState(false);
+  const [shipCalcErr, setShipCalcErr] = useState<string | null>(null);
 
-// ⬇️ agregado: notas y estado de submit alternativo
-const [notes, setNotes] = useState("");
-const [submittingShipping, setSubmittingShipping] = useState(false);
-// 🔹 NUEVO (checkout): resultados de cálculo
-const [shipOpts, setShipOpts] = useState<ShippingOption[] | null>(null);
-const [shipCalcLoading, setShipCalcLoading] = useState(false);
-const [shipCalcErr, setShipCalcErr] = useState<string | null>(null);
-// ⬆️ agregado
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+    if (!shippingAddressId.trim()) { setMsg("Indicá una dirección de envío."); return; }
+    if (!paymentMethod) { setMsg("Seleccioná un método de pago."); return; }
 
-async function onSubmit(e: React.FormEvent) {
-e.preventDefault();
-setMsg(null);
+    if (paymentMethod === "mercadopago") {
+      try {
+        setSubmitting(true);
+        const origin = typeof window !== "undefined" ? window.location.origin : process.env.NEXT_PUBLIC_SITE_BASE || "";
+        const successUrl = `${origin}/payments/mercadopago/return?source=checkout`;
+        const failureUrl = `${origin}/payments/mercadopago/return?source=checkout`;
+        const pendingUrl = `${origin}/payments/mercadopago/return?source=checkout`;
+        const pref = await createMercadoPagoCheckout({ successUrl, failureUrl, pendingUrl });
 
-if (!shippingAddressId.trim()) {
-  setMsg("Indicá una dirección de envío.");
-  return;
-}
-if (!paymentMethod) {
-  setMsg("Seleccioná un método de pago.");
-  return;
-}
+        console.debug("MP checkout resp (checkout):", pref);
+        const redirectUrl = getMpRedirectUrl(pref);
+        if (!redirectUrl) throw new Error("No se recibió la URL de checkout de Mercado Pago");
 
-// ✅ Si elige Mercado Pago → creamos preferencia por TODO el carrito y redirigimos
-if (paymentMethod === "mercadopago") {
-  try {
+        window.location.href = redirectUrl;
+        return;
+      } catch (e: any) {
+        const m = String(e?.message || "No se pudo iniciar el pago con Mercado Pago");
+        setMsg(m);
+        if (m.toLowerCase().includes("no autenticado") || m.toLowerCase().includes("credenciales")) {
+          router.push(`/auth?redirectTo=/checkout`);
+        }
+      } finally { setSubmitting(false); }
+      return;
+    }
+
+    // Resto de métodos
+    const payload: CreateOrderBody = {
+      shippingAddressId: shippingAddressId.trim(),
+      paymentMethod,
+      shippingMethod,
+      couponCode: couponCode.trim() || undefined,
+    };
     setSubmitting(true);
-
-    const origin =
-      typeof window !== "undefined" ? window.location.origin : process.env.NEXT_PUBLIC_SITE_BASE || "";
-    const successUrl = `${origin}/payments/mercadopago/return?source=checkout`;
-    const failureUrl = `${origin}/payments/mercadopago/return?source=checkout`;
-    const pendingUrl = `${origin}/payments/mercadopago/return?source=checkout`;
-
-    const pref = await createMercadoPagoCheckout({ successUrl, failureUrl, pendingUrl });
-
-    // Redirigimos al init_point devuelto por MP (con fallback a sandbox_init_point)
-    const redirectUrl = (pref as any)?.init_point || (pref as any)?.sandbox_init_point;
-    if (!redirectUrl) {
-      throw new Error("No se recibió la URL de checkout de Mercado Pago");
-    }
-    window.location.href = redirectUrl;
-    return;
-  } catch (e: any) {
-    const m = String(e?.message || "No se pudo iniciar el pago con Mercado Pago");
-    setMsg(m);
-    if (m.toLowerCase().includes("no autenticado") || m.toLowerCase().includes("credenciales")) {
-      router.push(`/auth?redirectTo=/checkout`);
-    }
-  } finally {
-    setSubmitting(false);
-  }
-  return;
-}
-
-// 🔁 Resto de métodos (tu flujo previo)
-const payload: CreateOrderBody = {
-  shippingAddressId: shippingAddressId.trim(),
-  paymentMethod,
-  shippingMethod,
-  couponCode: couponCode.trim() || undefined,
-};
-
-setSubmitting(true);
-try {
-  const o = await createOrder(payload);
-
-  // Si hay URL de pago → redirigimos al checkout del PSP
-  if ((o as any)?.paymentUrl) {
-    window.location.href = (o as any).paymentUrl;
-    return;
+    try {
+      const o = await createOrder(payload);
+      if ((o as any)?.paymentUrl) { window.location.href = (o as any).paymentUrl; return; }
+      router.push(`/pedidos/${(o as any)?._id}`);
+    } catch (e: any) {
+      const m = String(e?.message || "No se pudo crear el pedido");
+      setMsg(m);
+      if (m.toLowerCase().includes("no autenticado") || m.toLowerCase().includes("credenciales")) {
+        router.push(`/auth?redirectTo=/checkout`);
+      }
+    } finally { setSubmitting(false); }
   }
 
-  // Si no, vamos al detalle de pedido
-  router.push(`/pedidos/${(o as any)?._id}`);
-} catch (e: any) {
-  const m = String(e?.message || "No se pudo crear el pedido");
-  setMsg(m);
-  if (m.toLowerCase().includes("no autenticado") || m.toLowerCase().includes("credenciales")) {
-    router.push(`/auth?redirectTo=/checkout`);
+  async function handleCalcAtCheckout(e: React.FormEvent) {
+    e.preventDefault();
+    setShipOpts(null); setShipCalcErr(null);
+    if (!shippingAddressId.trim()) { setShipCalcErr("Indicá una dirección"); return; }
+    setShipCalcLoading(true);
+    try {
+      const res = await calculateShipping({ addressId: shippingAddressId.trim(), cartItems: [] } as any);
+      setShipOpts(res.options || []);
+      if (res.options?.[0]?.service) setShippingMethod(res.options[0].service);
+    } catch (e: any) { setShipOpts(null); setShipCalcErr(e?.message || "No se pudo calcular el envío"); }
+    finally { setShipCalcLoading(false); }
   }
-} finally {
-  setSubmitting(false);
-}
-
-
-}
-
-// 🔹 NUEVO (checkout): calcular desde checkout
-async function handleCalcAtCheckout(e: React.FormEvent) {
-  e.preventDefault();
-  setShipOpts(null);
-  setShipCalcErr(null);
-
-  if (!shippingAddressId.trim()) {
-    setShipCalcErr("Indicá una dirección");
-    return;
-  }
-  setShipCalcLoading(true);
-  try {
-    // Si tu backend exige cartItems, podrías agregar un endpoint alternativo que los derive del carrito.
-    // Suponiendo que /shipping/calculate admite el carrito del usuario autenticado:
-    const res = await calculateShipping({
-      addressId: shippingAddressId.trim(),
-      // Si tu backend requiere cartItems aquí, agregá un fetch al /cart y construí el array (igual que en CartPage).
-      cartItems: [], // ← si tu backend NO los requiere porque toma del carrito, dejalo vacío o ajusta backend
-    } as any);
-    setShipOpts(res.options || []);
-    // Setea por defecto el primer servicio
-    if (res.options?.[0]?.service) setShippingMethod(res.options[0].service);
-  } catch (e: any) {
-    setShipOpts(null);
-    setShipCalcErr(e?.message || "No se pudo calcular el envío");
-  } finally {
-    setShipCalcLoading(false);
-  }
-}
 
 
 return (

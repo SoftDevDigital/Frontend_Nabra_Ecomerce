@@ -183,3 +183,15 @@
   stroke: currentColor !important; 
   fill: none !important; 
 }
+
+/* Mostrar ícono de buscar en desktop (derecha) y ocultarlo en mobile */
+.searchDesktop { display: inline-flex; }
+@media (max-width: 860px){
+  .searchDesktop { display: none; }
+}
+
+/* Mostrar ícono de buscar en mobile (izquierda) y ocultarlo en desktop */
+.searchMobile { display: none; }
+@media (max-width: 860px){
+  .searchMobile { display: inline-flex; }
+}

@@ -208,3 +208,30 @@
   }
   .galleryImg{ border-radius: 16px; }
 }
+
+/* --- Cuando solo hay 1 imagen: mostrarla grande (hero) --- */
+.gallerySingle{
+  grid-template-columns: 1fr !important;   /* una sola columna */
+  justify-items: start;                    /* alinear a la izquierda */
+}
+
+.gallerySingle .galleryImg{
+  /* más alta y ancha, con proporción 4:5 típica de producto */
+  width: min(100%, 780px);
+  aspect-ratio: 4 / 5;
+  object-fit: cover;       /* o "contain" si querés ver todo el cuadro */
+  border-radius: 18px;
+}
+
+/* En desktop, dale aún más protagonismo */
+@media (min-width: 1024px){
+  .gallerySingle .galleryImg{
+    width: min(100%, 860px);
+    border-radius: 20px;
+  }
+
+  /* También podés darle más espacio a la columna de la galería */
+  .grid{
+    grid-template-columns: 1.6fr .8fr;  /* antes 1.2fr .8fr */
+  }
+}
