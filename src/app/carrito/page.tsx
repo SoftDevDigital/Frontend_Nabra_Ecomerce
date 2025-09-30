@@ -354,6 +354,38 @@ export default function CartPage() {
   const [payingMp, setPayingMp] = useState(false);
   const [payMsg, setPayMsg] = useState<string | null>(null);
 
+
+  // === MX: catálogos y validadores ===========================
+const MX_STATES = [
+  "Aguascalientes","Baja California","Baja California Sur","Campeche","Chiapas",
+  "Chihuahua","Ciudad de México","Coahuila","Colima","Durango","Estado de México",
+  "Guanajuato","Guerrero","Hidalgo","Jalisco","Michoacán","Morelos","Nayarit",
+  "Nuevo León","Oaxaca","Puebla","Querétaro","Quintana Roo","San Luis Potosí",
+  "Sinaloa","Sonora","Tabasco","Tamaulipas","Tlaxcala","Veracruz","Yucatán","Zacatecas"
+];
+
+// === MX: formulario previo al pago =========================
+const [mxEmail, setMxEmail] = useState("");
+const [mxName, setMxName]   = useState("Jane");
+const [mxLastname, setMxLastname] = useState("");
+const [mxPhone, setMxPhone] = useState("");
+
+const [mxState, setMxState] = useState("Ciudad de México");
+const [mxCity, setMxCity]   = useState("Ciudad de México");
+const [mxZip, setMxZip]     = useState("");
+const [mxStreet, setMxStreet] = useState("");
+
+const [mxSaveForNext, setMxSaveForNext] = useState(false);
+
+const [mxFetchingRates, setMxFetchingRates] = useState(false);
+const [mxFormErr, setMxFormErr] = useState<string | null>(null);
+
+// Para habilitar MP solo si hay dirección MX válida + tarifa elegida
+const isMxAddressValid =
+  !!mxStreet.trim() && !!mxCity.trim() && !!mxZip.trim() && MX_STATES.includes(mxState);
+
+  
+
   function buildApplyDiscountsPayload(items: CartItem[]): { cartItems: ApplyDiscountsRequestItem[]; totalAmount: number } {
     const cartItems: ApplyDiscountsRequestItem[] = items.map((it) => {
       const unitPrice =
@@ -396,6 +428,57 @@ export default function CartPage() {
   async function fetchPromotionTypes() {
     return apiFetch<{ types: PromotionType[] }>(`/promotions/types`, { method: "GET" });
   }
+
+  async function handleFetchMxShipping(e: React.FormEvent) {
+  e.preventDefault();
+  setMxFormErr(null);
+  setShipOptions(null);
+  setSelectedRate(null);
+
+  if (!isMxAddressValid) {
+    setMxFormErr("Completá calle, ciudad, CP y estado de México.");
+    return;
+  }
+
+  setMxFetchingRates(true);
+  try {
+    // 1) Opcional: guardar dirección en el carrito para futuras llamadas
+    if (mxSaveForNext) {
+      try {
+        await apiFetch(`/cart/shipping/address`, {
+          method: "POST",
+          body: JSON.stringify({
+            fullName: `${mxName} ${mxLastname}`.trim(),
+            phone: mxPhone || undefined,
+            addressLine: mxStreet.trim(),
+            city: mxCity.trim(),
+            postalCode: mxZip.trim(),
+            province: mxState,
+            notes: "",
+          }),
+        });
+      } catch { /* no romper el flujo si falla el guardado */ }
+    }
+
+    // 2) Traer servicios de envío para MX
+    const srv = await getShippingServices({
+      country: "MX",
+      state: mxState,
+      city: mxCity.trim(),
+      postalCode: mxZip.trim(),
+      addressLine: mxStreet.trim(),
+    });
+
+    const options = Array.isArray(srv?.options) ? srv.options : [];
+    setShipOptions(options);
+    setSelectedRate(options[0] ?? null);
+    if (options.length === 0) setMxFormErr("No hay métodos de envío disponibles para esa dirección.");
+  } catch (e: any) {
+    setMxFormErr(e?.message || "No se pudieron obtener los métodos de envío");
+  } finally {
+    setMxFetchingRates(false);
+  }
+}
 
   async function handleCalculateShipping(e: React.FormEvent) {
     e.preventDefault();
@@ -651,23 +734,52 @@ export default function CartPage() {
     finally { setAdding(false); }
   }
 
-  async function handleUpdateItem(itemId: string) {
-    setUpdateMsg(null); setUpdatingId(itemId);
-    try {
-      const current = edits[itemId] || { quantity: 1, size: "" };
-      const q = Math.max(1, Math.floor(Number(current.quantity) || 1));
-      const r = await apiFetch<UpdateCartItemResponse | CartResponse>(`/cart/${itemId}`, { method: "PUT", body: JSON.stringify({ quantity: q }) });
-      if ((r as any)?.cartItem && (r as any)?.cartTotal !== undefined) {
-        const ur = r as UpdateCartItemResponse;
-        setCartTotal(ur.cartTotal);
-        setItems((prev) =>
-          prev.map((it) => it._id === ur.cartItem._id ? { ...it, quantity: ur.cartItem.quantity, subtotal: ur.cartItem.subtotal } : it));
-        setUpdateMsg(ur.message || "Ítem actualizado ✅");
-      } else { setUpdateMsg("Ítem actualizado ✅"); }
-      await loadCart();
-    } catch (e: any) { setUpdateMsg(e?.message || "No se pudo actualizar el ítem"); }
-    finally { setUpdatingId(null); }
+ async function handleUpdateItem(itemId: string) {
+  setUpdateMsg(null);
+  setUpdatingId(itemId);
+  try {
+    const current = edits[itemId] || { quantity: 1, size: "" };
+    const q = Math.max(1, Math.floor(Number(current.quantity) || 1));
+    const s = (current.size ?? "").toString().trim();
+
+    // Validación en cliente para evitar 400
+    const it = items.find(i => i._id === itemId);
+    const allowedSizes: string[] = Array.isArray(it?.product?.sizes) ? it!.product!.sizes as string[] : [];
+    if (s && allowedSizes.length && !allowedSizes.includes(s)) {
+      throw new Error(`El talle ${s} no está disponible para "${it?.product?.name ?? "producto"}". Talles: ${allowedSizes.join(", ")}`);
+    }
+
+    // ✅ PUT al endpoint correcto
+    const body: Record<string, any> = { quantity: q };
+    if (s) body.size = s;
+
+    const r = await apiFetch<UpdateCartItemResponse | CartResponse>(
+      `/cart/update/${itemId}`,
+      { method: "PUT", body: JSON.stringify(body) }
+    );
+
+    // Optimista + refresh
+    if ((r as any)?.cartItem && (r as any)?.cartTotal !== undefined) {
+      const ur = r as UpdateCartItemResponse;
+      setCartTotal(ur.cartTotal);
+      setItems(prev => prev.map(x =>
+        x._id === ur.cartItem._id
+          ? { ...x, quantity: ur.cartItem.quantity, subtotal: ur.cartItem.subtotal, size: s || x.size }
+          : x
+      ));
+      setUpdateMsg((r as any).message || "Ítem actualizado ✅");
+    } else {
+      setUpdateMsg("Ítem actualizado ✅");
+    }
+
+    await loadCart();
+  } catch (e: any) {
+    setUpdateMsg(e?.message || "No se pudo actualizar el ítem");
+  } finally {
+    setUpdatingId(null);
   }
+}
+
 
   async function handleRemoveItem(itemId: string) {
     setRemoveMsg(null); setRemovingId(itemId);
@@ -1340,23 +1452,22 @@ export default function CartPage() {
                   </label>
 
                   <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 13, opacity: 0.8 }}>Talle</span>
-                    <input
-                      className={s.input}
-                      placeholder="(opcional)"
-                      value={edits[it._id]?.size ?? (it.size ?? "")}
-                      onChange={(e) =>
-                        setEdits((s) => ({
-                          ...s,
-                          [it._id]: {
-                            quantity: s[it._id]?.quantity ?? it.quantity,
-                            size: e.target.value,
-                          },
-                        }))
-                      }
-                      style={{ width: 120, padding: "6px 8px", borderRadius: 8, border: "1px solid #ddd" }}
-                    />
-                  </label>
+  <span style={{ fontSize: 13, opacity: 0.8 }}>Talle</span>
+  <select
+  value={edits[it._id]?.size ?? (it.size ?? "")}
+  onChange={(e) =>
+    setEdits(s => ({
+      ...s,
+      [it._id]: { quantity: s[it._id]?.quantity ?? it.quantity, size: e.target.value }
+    }))
+  }
+  style={{ width: 120, padding: "6px 8px", borderRadius: 8, border: "1px solid #ddd" }}
+>
+  <option value="">(sin cambio)</option>
+  {(Array.isArray(it.product?.sizes) ? it.product!.sizes as string[] : [it.size].filter(Boolean))
+    .map(sz => <option key={sz} value={sz}>{sz}</option>)}
+</select>
+</label>
 
                   <div style={{ display: "flex", gap: 8 }}>
                     <button
@@ -1691,6 +1802,180 @@ export default function CartPage() {
           </div>
         )}
 
+        {/* === PRE-PAGO: Información de contacto y envío (México) ================== */}
+<section
+  className={s.card}
+  style={{
+    marginTop: 12,
+    padding: 12,
+    border: "1px solid #eee",
+    borderRadius: 12,
+    background: "#fff",
+  }}
+>
+  <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 8 }}>
+    <h3 style={{ margin: 0, fontSize: 16 }}>Información de contacto y entrega</h3>
+    <span style={{ fontSize: 12, opacity: 0.7 }}>Solo envíos dentro de <strong>México</strong></span>
+  </div>
+
+  <form onSubmit={handleFetchMxShipping} style={{ display: "grid", gap: 8 }}>
+    {/* Contacto */}
+    <div className={s.grid3} style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr", gap: 8 }}>
+      <input
+        className={s.input}
+        placeholder="Email o teléfono"
+        value={mxEmail}
+        onChange={(e)=>setMxEmail(e.target.value)}
+        style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
+      />
+      <input
+        className={s.input}
+        placeholder="Nombre"
+        value={mxName}
+        onChange={(e)=>setMxName(e.target.value)}
+        style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
+      />
+      <input
+        className={s.input}
+        placeholder="Apellidos (opcional)"
+        value={mxLastname}
+        onChange={(e)=>setMxLastname(e.target.value)}
+        style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
+      />
+    </div>
+
+    {/* Dirección */}
+    <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+      <div className={s.grid3} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+        {/* País fijo */}
+        <input
+          className={s.input}
+          value="México"
+          readOnly
+          style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#f6f6f6" }}
+        />
+        <select
+          className={s.input}
+          value={mxState}
+          onChange={(e)=>setMxState(e.target.value)}
+          style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
+        >
+          {MX_STATES.map(st => <option key={st} value={st}>{st}</option>)}
+        </select>
+        <input
+          className={s.input}
+          placeholder="Ciudad"
+          value={mxCity}
+          onChange={(e)=>setMxCity(e.target.value)}
+          style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
+        />
+      </div>
+
+      <input
+        className={s.input}
+        placeholder="Calle, número, piso, depto"
+        value={mxStreet}
+        onChange={(e)=>setMxStreet(e.target.value)}
+        style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
+      />
+
+      <div className={s.grid3} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+        <input
+          className={s.input}
+          placeholder="CP"
+          value={mxZip}
+          onChange={(e)=>setMxZip(e.target.value)}
+          style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
+        />
+        <input
+          className={s.input}
+          placeholder="Teléfono (opcional)"
+          value={mxPhone}
+          onChange={(e)=>setMxPhone(e.target.value)}
+          style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
+        />
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+          <input type="checkbox" checked={mxSaveForNext} onChange={()=>setMxSaveForNext(v=>!v)} />
+          Guardar mi información para la próxima vez
+        </label>
+      </div>
+    </div>
+
+    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+      <button
+        type="submit"
+        disabled={mxFetchingRates}
+        className={s.btn}
+        style={{
+          padding: "8px 12px",
+          borderRadius: 8,
+          border: "1px solid #ddd",
+          background: mxFetchingRates ? "#f3f3f3" : "white",
+          cursor: mxFetchingRates ? "default" : "pointer",
+          fontWeight: 600,
+        }}
+      >
+        {mxFetchingRates ? "Buscando métodos…" : "Ingresar dirección para ver métodos disponibles"}
+      </button>
+      {mxFormErr && <span style={{ color: "#b00020" }}>{mxFormErr}</span>}
+    </div>
+  </form>
+
+  {/* Métodos de envío */}
+  {!!shipOptions && (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ fontWeight: 600, marginBottom: 6 }}>Métodos disponibles</div>
+      {shipOptions.length === 0 ? (
+        <div style={{ color: "#666" }}>No hay opciones para esa dirección.</div>
+      ) : (
+        <div style={{ display: "grid", gap: 8 }}>
+          {shipOptions.map((r, i) => {
+            const checked =
+              selectedRate?.serviceId === r.serviceId &&
+              selectedRate?.carrier === (r as any).carrier &&
+              selectedRate?.service === r.service;
+            return (
+              <label key={`${r.carrier}_${r.service}_${r.serviceId || i}`} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input
+                  type="radio"
+                  name="mx-ship-rate"
+                  checked={!!checked}
+                  onChange={() => setSelectedRate(r as any)}
+                />
+                <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+                  <strong>{(r as any).carrier || "Carrier"}</strong>
+                  <span>• {r.service}</span>
+                  {r.days && <span>• {r.days}</span>}
+                  <span style={{ marginLeft: "auto" }}>{money(r.price, r.currency || "ARS")}</span>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  )}
+
+  {/* Total combinado si hay tarifa */}
+  {selectedRate && (
+    <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px dashed #ddd", display: "grid", gap: 6 }}>
+      <div><strong>Envío:</strong> {money(selectedRate.price, selectedRate.currency || cartTotalSummary?.currency || "ARS")}</div>
+      <div style={{ fontSize: 15 }}>
+        <strong>Total a pagar (productos + envío):</strong>{" "}
+        {money(
+          (typeof cartTotalSummary?.estimatedTotal === "number" ? cartTotalSummary.estimatedTotal
+            : typeof summaryV2?.finalTotal === "number" ? summaryV2.finalTotal
+            : typeof cartFinalTotal === "number" ? cartFinalTotal
+            : typeof cartTotal === "number" ? cartTotal : 0)
+          + (selectedRate.price || 0),
+          selectedRate.currency || cartTotalSummary?.currency || summaryV2?.cartSummary?.currency || "ARS"
+        )}
+      </div>
+    </div>
+  )}
+</section>
+
+
       {/* === CTA de Checkout / Pago === */}
       {!loading && !err && items.length > 0 && (
         <section
@@ -1725,15 +2010,7 @@ export default function CartPage() {
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
               {/* Ir al flujo /checkout (con métodos, dirección y cupón) */}
-              <button
-                type="button"
-                onClick={() => router.push("/checkout")}
-                className={s.btn}
-                style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #ddd", background: "white", fontWeight: 700 }}
-                title="Ir al checkout"
-              >
-                Ir al checkout
-              </button>
+             
 
               {/* Pagar ahora con Mercado Pago (preferencia del carrito) */}
               <button
@@ -1745,7 +2022,7 @@ export default function CartPage() {
                   padding: "10px 14px",
                   borderRadius: 10,
                   border: "1px solid #ddd",
-                  background: payingMp ? "#f3f3f3" : "white",
+                  background: payingMp ? "#080808ff" : "black",
                   fontWeight: 800,
                   cursor: payingMp ? "default" : "pointer",
                 }}

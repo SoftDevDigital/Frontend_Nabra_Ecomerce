@@ -22,7 +22,6 @@ type UploadResponse = {
 
 /* ⬇️⬇️⬇️ AGREGADO: helpers para API base y Authorization */
 function getApiBase() {
-  // por defecto apuntamos a tu backend en 3001 (coincide con tu cURL)
   return process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3001";
 }
 function getAuthHeader() {
@@ -43,7 +42,6 @@ function getJwtPayload(): any | null {
     const parts = t.split(".");
     if (parts.length !== 3) return null;
     const json = atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"));
-    // decodeURIComponent(escape(...)) para manejar UTF-8 en algunos navegadores
     return JSON.parse(decodeURIComponent(escape(json)));
   } catch {
     return null;
@@ -84,6 +82,20 @@ export default function MediaUploadPage() {
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
   const [deactivateMsg, setDeactivateMsg] = useState<string | null>(null);
 
+  /* ⬇️⬇️⬇️ NUEVO: Crear media DESDE URL */
+  const [urlType, setUrlType] = useState<"product" | "cover">("cover");
+  const [imageUrl, setImageUrl] = useState("");
+  const [urlLoading, setUrlLoading] = useState(false);
+  const [urlMsg, setUrlMsg] = useState<string | null>(null);
+  const [urlCreated, setUrlCreated] = useState<MediaDoc | null>(null);
+
+  /* ⬇️⬇️⬇️ NUEVO: Consultar portada activa (URL) */
+  const [activeCoverUrl, setActiveCoverUrl] = useState<string | null>(null);
+  const [activeCoverMediaId, setActiveCoverMediaId] = useState<string | null>(null);
+  const [activeLoading, setActiveLoading] = useState(false);
+  const [activeMsg, setActiveMsg] = useState<string | null>(null);
+  /* ⬆️⬆️⬆️ FIN nuevos estados */
+
   /* ⬇️⬇️⬇️ AGREGADO: estado admin y efecto para setearlo desde el JWT */
   const [isAdmin, setIsAdmin] = useState(false);
   useEffect(() => {
@@ -92,59 +104,102 @@ export default function MediaUploadPage() {
   /* ⬆️⬆️⬆️ FIN agregado */
 
   async function handleUpload(e: React.FormEvent) {
-  e.preventDefault();
-  setMsg(null);
-  setResult(null);
+    e.preventDefault();
+    setMsg(null);
+    setResult(null);
 
-  if (!file) {
-    setMsg("Seleccioná una imagen (JPEG/PNG).");
-    return;
-  }
-  if (!/^image\/(jpeg|png)$/.test(file.type)) {
-    setMsg("Solo se permiten imágenes JPEG/PNG.");
-    return;
-  }
+    if (!file) {
+      setMsg("Seleccioná una imagen (JPEG/PNG).");
+      return;
+    }
+    if (!/^image\/(jpeg|png)$/.test(file.type)) {
+      setMsg("Solo se permiten imágenes JPEG/PNG.");
+      return;
+    }
 
-  setLoading(true);
-  try {
-    const form = new FormData();
-    form.append("file", file);
-    form.append("type", type);
+    setLoading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("type", type);
 
-    const r = await apiFetch<UploadResponse>("/media/upload", {
-      method: "POST",
-      body: form,
-    });
+      const r = await apiFetch<UploadResponse>("/media/upload", {
+        method: "POST",
+        body: form,
+      });
 
-    setResult(r.data);
-    setMsg(r.message || "Archivo subido ✅");
+      setResult(r.data);
+      setMsg(r.message || "Archivo subido ✅");
 
-    // 👇 si es cover, la activamos
-    if (r.data.type === "cover") {
-      try {
-        const act = await apiFetch<UploadResponse>(`/media/cover-image/${r.data._id}`, {
-          method: "POST",
-        });
-        setResult(act.data); // versión activa con active:true
-        setMsg("Portada cambiada ✅");
-      } catch (err:any) {
-        setMsg("Imagen subida pero no se pudo activar como portada");
+      // 👇 si es cover, la activamos
+      if (r.data.type === "cover") {
+        try {
+          const act = await apiFetch<UploadResponse>(`/media/cover-image/${r.data._id}`, {
+            method: "POST",
+          });
+          setResult(act.data); // versión activa con active:true
+          setMsg("Portada cambiada ✅");
+        } catch (err:any) {
+          setMsg("Imagen subida pero no se pudo activar como portada");
+        }
       }
-    }
 
-    // (dejamos tus líneas existentes tal cual, no borro nada)
-    setResult(r.data);
-    setMsg(r.message || "Archivo subido ✅");
-  } catch (err: any) {
-    setMsg(err?.message || "No se pudo subir el archivo");
-    if (String(err?.message || "").toLowerCase().includes("no autenticado")) {
-      window.location.href = "/auth?redirectTo=/admin/media";
+      setResult(r.data);
+      setMsg(r.message || "Archivo subido ✅");
+    } catch (err: any) {
+      setMsg(err?.message || "No se pudo subir el archivo");
+      if (String(err?.message || "").toLowerCase().includes("no autenticado")) {
+        window.location.href = "/auth?redirectTo=/admin/media";
+      }
+    } finally {
+      setLoading(false);
     }
-  } finally {
-    setLoading(false);
   }
-}
 
+  /* 🔹🔹🔹 NUEVO: crear media DESDE URL (POST /media/upload con JSON) */
+  async function handleUploadByUrl(e: React.FormEvent) {
+    e.preventDefault();
+    setUrlMsg(null);
+    setUrlCreated(null);
+
+    const src = imageUrl.trim();
+    if (!src) {
+      setUrlMsg("Ingresá la URL de la imagen.");
+      return;
+    }
+
+    setUrlLoading(true);
+    try {
+      const r = await apiFetch<UploadResponse>("/media/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: src, type: urlType }),
+      });
+
+      setUrlCreated(r.data);
+      setUrlMsg("Imagen creada desde URL ✅");
+
+      // Si fue subida como 'cover', activar inmediatamente
+      if (r.data.type === "cover") {
+        try {
+          const act = await apiFetch<UploadResponse>(`/media/cover-image/${r.data._id}`, {
+            method: "POST",
+          });
+          setUrlCreated(act.data);
+          setUrlMsg("Portada creada y activada ✅");
+        } catch (err: any) {
+          setUrlMsg("Imagen creada pero no se pudo activar como portada.");
+        }
+      }
+    } catch (err: any) {
+      setUrlMsg(err?.message || "No se pudo crear la imagen desde la URL.");
+      if (String(err?.message || "").toLowerCase().includes("no autenticado")) {
+        window.location.href = "/auth?redirectTo=/admin/media";
+      }
+    } finally {
+      setUrlLoading(false);
+    }
+  }
 
   // 🔹 AGREGADO: handler para GET /media/:id (ahora con Authorization si hay token)
   async function handleLookup(e: React.FormEvent) {
@@ -165,7 +220,7 @@ export default function MediaUploadPage() {
         cache: "no-store",
         headers: {
           accept: "application/json",
-          ...getAuthHeader(), // ⬅️ si hay token, lo manda
+          ...getAuthHeader(),
         },
       });
       const json = await res.json();
@@ -187,19 +242,13 @@ export default function MediaUploadPage() {
     setDeleteMsg(null);
     setDeletingId(id);
     try {
-      // Respuesta Exitosa (200): Vacío
       await apiFetch<unknown>(`/media/${id}`, { method: "DELETE" });
 
       setDeleteMsg("Archivo eliminado 🗑️");
-      // Si el que borraste coincide con los mostrados, los limpiamos
       setResult((prev) => (prev?._id === id ? null : prev));
       setLookupResult((prev) => (prev?._id === id ? null : prev));
-      // si estás viendo ese id en el input de búsqueda, opcionalmente lo limpiás:
       if (lookupId === id) setLookupId("");
     } catch (err: any) {
-      // 403: “Se requiere rol de administrador”
-      // 404: “Archivo no encontrado”
-      // 401: sin token
       setDeleteMsg(err?.message || "No se pudo eliminar el archivo");
       if (String(err?.message || "").toLowerCase().includes("no autenticado")) {
         window.location.href = "/auth?redirectTo=/admin/media";
@@ -215,21 +264,17 @@ export default function MediaUploadPage() {
     setActivateMsg(null);
     setActivatingId(id);
     try {
-      // Respuesta Exitosa (200): Objeto Media actualizado
       const r = await apiFetch<UploadResponse>(`/media/cover-image/${id}`, {
         method: "POST",
       });
 
       const updated = r.data;
-      // Si coincide con los mostrados, actualizamos su estado (active/etc.)
       setResult((prev) => (prev?._id === id ? updated : prev));
       setLookupResult((prev) => (prev?._id === id ? updated : prev));
+      setUrlCreated((prev) => (prev?._id === id ? updated : prev));
 
       setActivateMsg("Imagen activada como portada ✅");
     } catch (err: any) {
-      // 403: “Se requiere rol de administrador”
-      // 404: “Imagen de portada inválida”
-      // 401: sin token
       setActivateMsg(err?.message || "No se pudo activar como portada");
       if (String(err?.message || "").toLowerCase().includes("no autenticado")) {
         window.location.href = "/auth?redirectTo=/admin/media";
@@ -245,21 +290,17 @@ export default function MediaUploadPage() {
     setDeactivateMsg(null);
     setDeactivatingId(id);
     try {
-      // Respuesta Exitosa (200): Objeto Media actualizado
       const r = await apiFetch<UploadResponse>(`/media/cover-image/${id}/deactivate`, {
         method: "POST",
       });
 
       const updated = r.data;
-      // Actualizamos si es el item que estamos mostrando
       setResult((prev) => (prev?._id === id ? updated : prev));
       setLookupResult((prev) => (prev?._id === id ? updated : prev));
+      setUrlCreated((prev) => (prev?._id === id ? updated : prev));
 
       setDeactivateMsg("Imagen de portada desactivada ✅");
     } catch (err: any) {
-      // 403: “Se requiere rol de administrador”
-      // 404: “Imagen de portada inválida”
-      // 401: sin token
       setDeactivateMsg(err?.message || "No se pudo desactivar la portada");
       if (String(err?.message || "").toLowerCase().includes("no autenticado")) {
         window.location.href = "/auth?redirectTo=/admin/media";
@@ -269,8 +310,40 @@ export default function MediaUploadPage() {
     }
   }
 
+  /* 🔹🔹🔹 NUEVO: GET /media/cover-image/active/url */
+  async function handleGetActiveCover() {
+    setActiveMsg(null);
+    setActiveCoverUrl(null);
+    setActiveCoverMediaId(null);
+    setActiveLoading(true);
+    try {
+      const res = await apiFetch<any>("/media/cover-image/active/url", { method: "GET" });
+      // Soportar distintos formatos: string o { url, mediaId } o { data: ... }
+      const data = (res as any)?.data ?? res;
+      let url: string | null = null;
+      let mid: string | null = null;
+
+      if (typeof data === "string") {
+        url = data;
+      } else if (data?.url) {
+        url = data.url;
+        mid = data.mediaId || data._id || null;
+      }
+
+      if (!url) throw new Error("No se encontró portada activa.");
+      setActiveCoverUrl(url);
+      if (mid) setActiveCoverMediaId(mid);
+      setActiveMsg("Portada activa encontrada ✅");
+    } catch (err: any) {
+      setActiveMsg(err?.message || "No se pudo obtener la portada activa.");
+    } finally {
+      setActiveLoading(false);
+    }
+  }
+
   const apiBase = getApiBase();
   const joinUrl = (u: string) => `${apiBase}/${u}`.replace(/([^:]\/)\/+/g, "$1");
+  const toAbsolute = (u?: string) => (u && /^https?:\/\//i.test(u) ? u : u ? joinUrl(u) : "");
 
   return (
     <main style={{ maxWidth: 720, margin: "24px auto", padding: "0 16px" }}>
@@ -281,7 +354,7 @@ export default function MediaUploadPage() {
         </span>
       </header>
 
-      {/* ⬇️⬇️⬇️ AGREGADO: gateo del formulario por admin */}
+      {/* ==================== FORM SUBIR ARCHIVO (EXISTENTE) ==================== */}
       {isAdmin ? (
         <form
           onSubmit={handleUpload}
@@ -337,7 +410,118 @@ export default function MediaUploadPage() {
           <p style={{ margin: 0 }}>Para subir, activar/desactivar o eliminar medios necesitás permisos de administrador.</p>
         </div>
       )}
-      {/* ⬆️⬆️⬆️ FIN gateo */}
+
+      {/* ==================== NUEVO: SUBIR DESDE URL ==================== */}
+      {isAdmin && (
+        <section style={{ marginTop: 16 }}>
+          <h2 style={{ fontSize: 18, marginBottom: 8 }}>Crear media desde URL (POST /media/upload)</h2>
+          <form
+            onSubmit={handleUploadByUrl}
+            style={{
+              display: "grid",
+              gap: 8,
+              padding: 12,
+              border: "1px solid #eee",
+              borderRadius: 12,
+              background: "#fff",
+            }}
+          >
+            <label style={{ display: "grid", gap: 6 }}>
+              <span style={{ fontWeight: 600 }}>URL de la imagen</span>
+              <input
+                placeholder="https://cdn.example.com/portada.jpg"
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+                style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
+              />
+            </label>
+
+            <label style={{ display: "grid", gap: 6 }}>
+              <span style={{ fontWeight: 600 }}>Tipo</span>
+              <select
+                value={urlType}
+                onChange={(e) => setUrlType(e.target.value as any)}
+                style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
+              >
+                <option value="cover">cover</option>
+                <option value="product">product</option>
+              </select>
+            </label>
+
+            <button
+              type="submit"
+              disabled={urlLoading || !imageUrl.trim()}
+              style={{
+                padding: "8px 12px",
+                borderRadius: 8,
+                border: "1px solid #ddd",
+                background: urlLoading ? "#f3f3f3" : "white",
+                cursor: urlLoading ? "default" : "pointer",
+                fontWeight: 700,
+                width: "fit-content",
+              }}
+            >
+              {urlLoading ? "Creando…" : "Crear desde URL"}
+            </button>
+
+            {urlMsg && <p style={{ margin: 0, color: urlMsg.includes("✅") ? "green" : "crimson" }}>{urlMsg}</p>}
+          </form>
+
+          {urlCreated && (
+            <div
+              style={{
+                marginTop: 8,
+                display: "grid",
+                gap: 8,
+                border: "1px solid #eee",
+                borderRadius: 12,
+                padding: 12,
+                background: "#fff",
+              }}
+            >
+              <div><strong>_id:</strong> {urlCreated._id}</div>
+              <div><strong>fileName:</strong> {urlCreated.fileName}</div>
+              <div><strong>type:</strong> {urlCreated.type}</div>
+              <div><strong>mimeType:</strong> {urlCreated.mimeType}</div>
+              <div><strong>active:</strong> {String(urlCreated.active)}</div>
+              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                <strong>url:</strong>
+                <code style={{ background: "#f7f7f7", padding: "2px 6px", borderRadius: 6 }}>
+                  {urlCreated.url}
+                </code>
+              </div>
+
+              <div style={{ marginTop: 8 }}>
+                <img
+                  src={toAbsolute(urlCreated.url)}
+                  alt={urlCreated.fileName}
+                  style={{ maxWidth: 320, borderRadius: 8, border: "1px solid #eee" }}
+                />
+              </div>
+
+              {isAdmin && urlCreated.type === "cover" && !urlCreated.active && (
+                <button
+                  type="button"
+                  onClick={() => handleActivateCover(urlCreated._id)}
+                  disabled={activatingId === urlCreated._id}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: 8,
+                    border: "1px solid #ddd",
+                    background: activatingId === urlCreated._id ? "#f3f3f3" : "white",
+                    cursor: activatingId === urlCreated._id ? "default" : "pointer",
+                    fontWeight: 600,
+                    width: "fit-content",
+                  }}
+                  title="Activar como portada"
+                >
+                  {activatingId === urlCreated._id ? "Activando…" : "Activar como portada"}
+                </button>
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
       {result && (
         <section style={{ marginTop: 16 }}>
@@ -367,7 +551,7 @@ export default function MediaUploadPage() {
             {/* Vista previa si es imagen */}
             <div style={{ marginTop: 8 }}>
               <img
-                src={joinUrl(result.url)}
+                src={toAbsolute(result.url)}
                 alt={result.fileName}
                 style={{ maxWidth: 320, borderRadius: 8, border: "1px solid #eee" }}
               />
@@ -393,7 +577,7 @@ export default function MediaUploadPage() {
                 Ver JSON en backend
               </a>
               <a
-                href={joinUrl(result.url)}
+                href={toAbsolute(result.url)}
                 target="_blank" rel="noreferrer"
                 style={{ textDecoration: "underline" }}
                 title="Abrir archivo (url)"
@@ -401,7 +585,6 @@ export default function MediaUploadPage() {
                 Abrir archivo (url)
               </a>
             </div>
-            {/* ⬆️⬆️⬆️ FIN agregados */}
 
             {/* 🔹 AGREGADO: botones de acciones (SOLO ADMIN) */}
             {isAdmin && (
@@ -534,10 +717,10 @@ export default function MediaUploadPage() {
             </div>
 
             {/* Vista previa si es imagen */}
-            {/^\image\//.test(lookupResult.mimeType) && (
+            {/^\image\//.test(lookupResult.mimeType) && ( // 👈 (dejado como estaba)
               <div style={{ marginTop: 8 }}>
                 <img
-                  src={joinUrl(lookupResult.url)}
+                  src={toAbsolute(lookupResult.url)}
                   alt={lookupResult.fileName}
                   style={{ maxWidth: 320, borderRadius: 8, border: "1px solid #eee" }}
                 />
@@ -564,7 +747,7 @@ export default function MediaUploadPage() {
                 Ver JSON en backend
               </a>
               <a
-                href={joinUrl(lookupResult.url)}
+                href={toAbsolute(lookupResult.url)}
                 target="_blank" rel="noreferrer"
                 style={{ textDecoration: "underline" }}
                 title="Abrir archivo (url)"
@@ -572,7 +755,6 @@ export default function MediaUploadPage() {
                 Abrir archivo (url)
               </a>
             </div>
-            {/* ⬆️⬆️⬆️ FIN agregados */}
 
             {/* 🔹 AGREGADO: botones de acciones (SOLO ADMIN) */}
             {isAdmin && (
@@ -637,6 +819,68 @@ export default function MediaUploadPage() {
                 </button>
               </div>
             )}
+          </div>
+        )}
+      </section>
+
+      {/* ==================== NUEVO: BOTÓN PARA CONSULTAR PORTADA ACTIVA ==================== */}
+      <section style={{ marginTop: 24 }}>
+        <h2 style={{ fontSize: 18, marginBottom: 8 }}>Portada activa (GET /media/cover-image/active/url)</h2>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+          <button
+            type="button"
+            onClick={handleGetActiveCover}
+            disabled={activeLoading}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 8,
+              border: "1px solid #ddd",
+              background: activeLoading ? "#f3f3f3" : "white",
+              cursor: activeLoading ? "default" : "pointer",
+              fontWeight: 600,
+            }}
+          >
+            {activeLoading ? "Consultando…" : "Obtener portada activa"}
+          </button>
+          {activeMsg && (
+            <span style={{ color: activeMsg.includes("✅") ? "green" : "crimson" }}>{activeMsg}</span>
+          )}
+        </div>
+
+        {activeCoverUrl && (
+          <div
+            style={{
+              display: "grid",
+              gap: 8,
+              border: "1px solid #eee",
+              borderRadius: 12,
+              padding: 12,
+              background: "#fff",
+            }}
+          >
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <strong>URL:</strong>
+              <code style={{ background: "#f7f7f7", padding: "2px 6px", borderRadius: 6 }}>{activeCoverUrl}</code>
+              <a href={activeCoverUrl} target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>
+                Abrir
+              </a>
+              {activeCoverMediaId && (
+                <a
+                  href={`${getApiBase()}/media/${activeCoverMediaId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ textDecoration: "underline" }}
+                  title="Ver JSON en backend"
+                >
+                  Ver JSON (mediaId: {activeCoverMediaId})
+                </a>
+              )}
+            </div>
+            <img
+              src={activeCoverUrl}
+              alt="Portada activa"
+              style={{ maxWidth: 360, borderRadius: 8, border: "1px solid #eee" }}
+            />
           </div>
         )}
       </section>

@@ -13,6 +13,8 @@ import {
 import { resolveImageUrls } from "@/lib/resolveImageUrls";
 import { addToCart } from "@/lib/cartClient";
 import s from "./Catalogo.module.css";
+/* ✨ NUEVO: hook de animación */
+import { useFlyToCart } from "@/app/hooks/useFlyToCart";
 
 function currency(n?: number) {
   if (typeof n !== "number") return "";
@@ -29,7 +31,6 @@ function basePrice(p: ProductDto) {
   return typeof p.price === "number" ? p.price : (p as any).originalPrice;
 }
 function displayPrice(p: ProductDto) {
-  // Si hay finalPrice menor al base, mostrarlo; si no, mostrar price/originalPrice
   const fp = (p as any).finalPrice as number | undefined;
   if (hasDiscount(p) && typeof fp === "number") return fp;
   return basePrice(p);
@@ -41,6 +42,36 @@ function discountPercent(p: ProductDto) {
     return Math.round((1 - f / b) * 100);
   }
   return 0;
+}
+
+/* 🔔 NUEVO: helpers contador de carrito (iguales a Featured) */
+async function fetchCartTotalCount(): Promise<number | null> {
+  try {
+    const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3001";
+    const token = typeof window !== "undefined" ? localStorage.getItem("nabra_token") : null;
+    const res = await fetch(`${API_BASE}/cart/total`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    const raw = await res.json();
+    const data = raw?.success ? raw.data : raw;
+    const count =
+      typeof data?.totalQuantity === "number"
+        ? data.totalQuantity
+        : (typeof data?.totalItems === "number" ? data.totalItems : null);
+    return typeof count === "number" ? count : null;
+  } catch {
+    return null;
+  }
+}
+function emitCartCount(count: number) {
+  try {
+    localStorage.setItem("cart_count", String(count));
+    window.dispatchEvent(new CustomEvent("cart:count", { detail: { count } }));
+  } catch { /* noop */ }
 }
 
 export default function CatalogoPage() {
@@ -79,6 +110,9 @@ export default function CatalogoPage() {
   // 🆕 Estado controlado para talle/size en tiempo real
   const [sizeTerm, setSizeTerm] = useState<string>(sp.get("size") ?? "");
 
+  // ✨ NUEVO: hook fly + portal
+  const { fly, Portal } = useFlyToCart();
+
   // Mantener inputs sincronizados si cambian los params (back/forward)
   useEffect(() => {
     const currentSearch = sp.get("search") ?? "";
@@ -110,7 +144,7 @@ export default function CatalogoPage() {
   /* 🆕 Query para el fetch que NO manda search/category/size al backend (fallback 100% front) */
   const queryForFetch = useMemo(() => {
     const q: any = { ...query };
-    if (q.search) q.__localSearch = q.search; // los guardo por si querés loguearlos
+    if (q.search) q.__localSearch = q.search;
     delete q.search;
     if (q.category) q.__localCategory = q.category;
     delete q.category;
@@ -127,7 +161,7 @@ export default function CatalogoPage() {
       setErr(null);
       setThumbs({});
       try {
-        const res = await fetchProducts(queryForFetch); // sin search/category/size
+        const res = await fetchProducts(queryForFetch);
         if (abort) return;
         setData(res);
 
@@ -211,6 +245,29 @@ export default function CatalogoPage() {
       const colorToSend = (colorById[productId] || "").trim() || undefined;
 
       await addToCart({ productId, quantity: 1, size: sizeToSend, color: colorToSend });
+
+      /* ✨ NUEVO: animación fly-to-cart */
+      const imgEl = document.querySelector<HTMLImageElement>(`[data-product-img="${productId}"]`);
+      const cartEl = document.querySelector<HTMLElement>("[data-cart-target]");
+      if (imgEl && cartEl) {
+        try {
+          // @ts-expect-error opciones opcionales
+          fly(imgEl, cartEl, { duration: 700, easing: "ease-out", shrinkTo: 0.2, shadow: true });
+        } catch {
+          // @ts-ignore
+          fly(imgEl, cartEl);
+        }
+      }
+
+      /* 🔔 NUEVO: actualizar contador del carrito (server -> evento) */
+      const newCount = await fetchCartTotalCount();
+      if (typeof newCount === "number") {
+        emitCartCount(newCount);
+      } else {
+        const prev = Number(localStorage.getItem("cart_count") || "0") || 0;
+        emitCartCount(prev + 1);
+      }
+
       setAddMsgGlobal("Producto agregado ✅");
       setCardMsg(productId, "Producto agregado ✅");
     } catch (e: any) {
@@ -301,6 +358,9 @@ export default function CatalogoPage() {
 
   return (
     <main className={s.page}>
+      {/* ✨ NUEVO: portal para renderizar los “chips” voladores */}
+      <Portal />
+
       <header className={s.header}>
         <h1 className={s.title}>Catálogo</h1>
         <p className={s.subtitle}>{shownCount} resultados</p>
@@ -503,6 +563,8 @@ export default function CatalogoPage() {
                         alt={p.name}
                         className={s.thumbImg}
                         loading="lazy"
+                        /* ✨ NUEVO: identificador para la animación */
+                        data-product-img={p._id}
                       />
                     </div>
                   </a>

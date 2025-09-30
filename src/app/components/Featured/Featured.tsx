@@ -8,6 +8,8 @@ import { resolveImageUrls } from "@/lib/resolveImageUrls";
 import { fetchProducts, PRODUCTS_API_BASE, ProductDto } from "@/lib/productsApi";
 import { addToCart } from "@/lib/cartClient";
 import { useRouter } from "next/navigation";
+/* 👇 NUEVO */
+import { useFlyToCart } from "@/app/hooks/useFlyToCart";
 
 type Product = ProductDto & {
   imageUrl?: string;
@@ -51,6 +53,35 @@ function isLikelyImageUrl(u: string) {
   return !/\.html?($|\?)/i.test(u) && !/\.php($|\?)/i.test(u);
 }
 
+/* 👇 NUEVO: helpers para sincronizar el badge del carrito */
+async function fetchCartTotalCount(): Promise<number | null> {
+  try {
+    const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3001";
+    const token = typeof window !== "undefined" ? localStorage.getItem("nabra_token") : null;
+    const res = await fetch(`${API_BASE}/cart/total`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    const raw = await res.json();
+    const data = raw?.success ? raw.data : raw;
+    const count = typeof data?.totalQuantity === "number"
+      ? data.totalQuantity
+      : (typeof data?.totalItems === "number" ? data.totalItems : null);
+    return typeof count === "number" ? count : null;
+  } catch {
+    return null;
+  }
+}
+function emitCartCount(count: number) {
+  try {
+    localStorage.setItem("cart_count", String(count));
+    window.dispatchEvent(new CustomEvent("cart:count", { detail: { count } }));
+  } catch { /* noop */ }
+}
+
 export default function Featured() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -67,6 +98,9 @@ export default function Featured() {
   function setCardMsg(id: string, msg: string | null) {
     setAddMsgById((m) => ({ ...m, [id]: msg }));
   }
+
+  /* 👇 NUEVO: hook de animación */
+  const { fly, Portal } = useFlyToCart();
 
   async function load() {
     setLoading(true);
@@ -109,7 +143,7 @@ export default function Featured() {
     }
   }
 
-  /* === MODIFICADO: quick add con soporte de talle/color === */
+  /* === MODIFICADO: quick add con soporte de talle/color + animación + badge === */
   async function handleQuickAdd(product: Product) {
     const productId = product._id;
     setAddingId(productId);
@@ -137,6 +171,27 @@ export default function Featured() {
       const colorToSend = (colorById[productId] || "").trim() || undefined;
 
       await addToCart({ productId, quantity: 1, size: sizeToSend, color: colorToSend });
+
+      /* 👇 NUEVO: FLY ANIMATION con “bump” del target para que se vea mejor */
+      const imgEl = document.querySelector<HTMLImageElement>(`[data-product-img="${productId}"]`);
+      const cartEl = document.querySelector<HTMLElement>("[data-cart-target]");
+      if (imgEl && cartEl) {
+        // fly admite (img, target [, options]). Si tu hook no soporta options, ignora el 3er arg sin romper.
+        try { fly(imgEl, cartEl, { duration: 700, easing: "ease-out", shrinkTo: 0.2, shadow: true }); } catch { fly(imgEl, cartEl as any); }
+        // micro-animación del icono de carrito (badge bump)
+        cartEl.classList.add("cart-bump");
+        setTimeout(() => cartEl.classList.remove("cart-bump"), 250);
+      }
+
+      // ✅ NUEVO: refrescar el contador del carrito (header) desde el servidor
+      const newCount = await fetchCartTotalCount();
+      if (typeof newCount === "number") emitCartCount(newCount);
+      else {
+        // fallback: si no pudimos traer del server, al menos incrementamos 1
+        const prev = Number(localStorage.getItem("cart_count") || "0") || 0;
+        emitCartCount(prev + 1);
+      }
+
       setAddMsg("Producto agregado ✅"); // (global, lo dejo como estaba)
       setCardMsg(productId, "Producto agregado ✅"); // feedback por tarjeta
       // opcional: router.push("/carrito");
@@ -162,6 +217,9 @@ export default function Featured() {
 
   return (
     <section className={styles.wrap}>
+      {/* 👇 NUEVO: portal de la animación */}
+      <Portal />
+
       <div className={styles.headerRow}>
         <h2 className={styles.h2}>Destacados</h2>
         <button onClick={load} className={styles.refreshBtn} title="Actualizar destacados">
@@ -199,7 +257,13 @@ export default function Featured() {
                 <article key={p._id} className={styles.card}>
                   <Link href={`/producto/${p._id}`} className={styles.imgLink} aria-label={p.name}>
                     <div className={styles.imgBox}>
-                      <img src={img} alt={p.name} className={styles.img} />
+                      <img
+                        src={img}
+                        alt={p.name}
+                        className={styles.img}
+                        /* 👇 NUEVO: identificador para animación */
+                        data-product-img={p._id}
+                      />
                     </div>
                   </Link>
 

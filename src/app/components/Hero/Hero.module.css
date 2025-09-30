@@ -6,20 +6,16 @@
   place-items: center;
   isolation: isolate;
 
-  /* ahora: SOLO usa la variable; si no está, no se ve nada (y el Hero no se renderiza) */
-  background-image: var(--hero-bg);
+  /* 👇 ESTA línea es imprescindible */
+  background-image: var(--hero-bg, none);
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
 }
-/* oscurezco un poco más para que el H1 quede súper legible */
+
 .overlay{
   position: absolute; inset: 0;
-  background: linear-gradient(
-    to bottom,
-    rgba(0,0,0,.45),
-    rgba(0,0,0,.25)
-  );
+  background: linear-gradient(to bottom, rgba(0,0,0,.45), rgba(0,0,0,.25));
   z-index: -1;
 }
 
@@ -27,10 +23,9 @@
   text-align: center;
   padding: 24px;
   color: #fff;
-  max-width: 1100px;    /* evita que el título se haga demasiado largo */
+  max-width: 1100px;
 }
 
-/* Título grande, en mayúsculas, con sombra suave como la ref */
 .title{
   font-weight: 800;
   text-transform: uppercase;
@@ -41,7 +36,6 @@
   margin: 0 0 26px;
 }
 
-/* Botón pastilla blanco con leve sombra */
 .cta{
   display: inline-block;
   padding: 14px 26px;
@@ -58,14 +52,12 @@
 .cta:hover{ background:#f7f7f7; }
 .cta:active{ transform: translateY(1px); }
 
-/* iPhone 12/14 (390–428) */
 @media (max-width: 428px){
-  .hero{ min-height: 520px; }                 /* un pelín más alta en vertical */
+  .hero{ min-height: 520px; }
   .title{ font-size: clamp(24px, 7.6vw, 34px); }
   .cta{ padding: 12px 22px; font-size: 14px; }
 }
 
-/* iPhone SE (320–360) */
 @media (max-width: 360px){
   .hero{ min-height: 480px; }
   .title{ font-size: 22px; line-height: 1.12; }

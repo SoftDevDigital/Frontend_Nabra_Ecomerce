@@ -47,10 +47,45 @@ export default function Header() {
   const [openMenu, setOpenMenu] = useState(false); // 👈 NUEVO
   const [openSearch, setOpenSearch] = useState(false);
 
+  /* 👇 NUEVO: contador de carrito (opcional) */
+  const [cartCount, setCartCount] = useState(0);
+
   useEffect(() => { 
     setIsAdmin(isAdminFromToken()); 
     setIsUser(isUserFromToken());   // 👈 NUEVO
   }, []);
+
+  /* 👇 NUEVO: escucha global para actualizar contador */
+  useEffect(() => {
+    const onCount = (e: any) => setCartCount(e?.detail?.count ?? 0);
+    window.addEventListener("cart:count", onCount as any);
+    return () => window.removeEventListener("cart:count", onCount as any);
+  }, []);
+
+  /* ✅ NUEVO: refrescar roles cuando haya login, cambios de token o navegación */
+  useEffect(() => {
+    const refreshRoles = () => {
+      setIsAdmin(isAdminFromToken());
+      setIsUser(isUserFromToken());
+    };
+
+    // 1) cuando cualquier parte del sitio dispare auth:login
+    window.addEventListener("auth:login", refreshRoles as any);
+
+    // 2) si otro tab escribe el token
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "nabra_token") refreshRoles();
+    };
+    window.addEventListener("storage", onStorage);
+
+    // 3) al cambiar de ruta, por si llegamos a /perfil sin haber refrescado
+    refreshRoles();
+
+    return () => {
+      window.removeEventListener("auth:login", refreshRoles as any);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [pathname]); // <- corre en cada navegación
 
   return (
     <>
@@ -162,16 +197,20 @@ export default function Header() {
               </svg>
             </button>
 
+            {/* 👇 NUEVO: carrito con data-cart-target + badge */}
             <Link
               href="/carrito"
-              className={`${styles.iconBtn} ${styles.iconForce}`}
+              className={`${styles.iconBtn} ${styles.iconForce} ${styles.cartBtn}`}
               aria-label="Carrito"
               title="Carrito"
             >
-              <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-                <path d="M6.5 8h11l-1 11H7.5L6.5 8z" stroke="currentColor" fill="none" strokeWidth="1.8" />
-                <path d="M9 8a3 3 0 0 1 6 0" stroke="currentColor" fill="none" strokeWidth="1.8" />
-              </svg>
+              <span className={styles.cartIcon} data-cart-target>
+                <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+                  <path d="M6.5 8h11l-1 11H7.5L6.5 8z" stroke="currentColor" fill="none" strokeWidth="1.8" />
+                  <path d="M9 8a3 3 0 0 1 6 0" stroke="currentColor" fill="none" strokeWidth="1.8" />
+                </svg>
+              </span>
+              {cartCount > 0 && <span className={styles.cartBadge}>{cartCount}</span>}
             </Link>
           </div>
         </div>
