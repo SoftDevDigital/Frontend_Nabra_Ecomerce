@@ -352,12 +352,14 @@ export default function Featured() {
               );
             })}
           </div>
-
-          <div className={styles.moreRow}>
-            <Link href="/catalogo" className={styles.moreLink}>
-              Ver catálogo completo
-            </Link>
-          </div>
+<div className={styles.moreRow}>
+  <Link href="/catalogo" className={styles.moreCta} rel="noopener noreferrer">
+    <span>Ver catálogo completo</span>
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" className={styles.moreIcon}>
+      <path d="M5 12h13M12 5l7 7-7 7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  </Link>
+</div>
         </>
       )}
     </section>

@@ -117,3 +117,65 @@
 @media (prefers-reduced-motion: reduce){
   .panel, .primaryCta, .ghostBtn, .closeBtn { transition: none !important; }
 }
+
+/* === CTA principal (negro) === */
+.primaryCta{
+  display:block; width: calc(100% - 28px*2); margin:12px 28px 18px;
+  height:56px; border-radius:14px;
+  border:1px solid #111; background:#111; color:#fff;
+  font-weight:700; letter-spacing:.2px;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color .15s ease, box-shadow .2s ease, transform .08s ease, color .15s ease;
+}
+
+/* ⛔️ QUITAMOS filter:brightness(...) */
+.primaryCta:hover{
+  background: #000;          /* más oscuro, sólido */
+  color: #fff;               /* fijamos blanco puro */
+  box-shadow: 0 8px 20px rgba(0,0,0,.18);
+  transform: translateY(-1px);
+}
+
+.primaryCta:active{
+  transform: translateY(0);
+  box-shadow: 0 4px 12px rgba(0,0,0,.14);
+}
+
+.primaryCta:focus-visible{
+  outline: 3px solid #b4cfd8;
+  outline-offset: 2px;
+}
+
+/* Estado disabled por si lo usás en el futuro */
+.primaryCta:disabled{
+  opacity:.6; cursor:not-allowed; box-shadow:none; transform:none;
+}
+
+/* ===== Botones secundarios ===== */
+.ghostBtn{
+  display:flex; align-items:center; justify-content:center; gap:10px;
+  height:56px; border-radius:14px; text-decoration:none;
+  border:1px solid #e6e6e6; background:#fff; color:#111; font-weight:600;
+  transition: background-color .15s ease, border-color .15s ease, box-shadow .2s ease, transform .08s ease, color .15s ease;
+}
+
+.ghostBtn:hover{
+  background:#f7f7f7;      /* claro, sin perder contraste del texto */
+  color:#111;               /* fijamos color del texto */
+  border-color:#e0e0e0;
+  box-shadow: 0 4px 14px rgba(0,0,0,.08);
+  transform: translateY(-1px);
+}
+
+.ghostBtn:active{
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+@media (max-width: 380px){
+  .primaryCta{
+    width: calc(100% - 16px*2);
+    margin:10px 16px 14px;
+    height:52px; border-radius:12px;
+    transition: background-color .15s ease, box-shadow .2s ease, transform .08s ease, color .15s ease;
+  }
+}

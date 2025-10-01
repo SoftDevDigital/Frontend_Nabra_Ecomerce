@@ -53,22 +53,7 @@ export default function AuthDialog({ open, onClose }: Props) {
         </button>
 
         {/* 👇 NUEVO: Google OAuth */}
-        <button
-          type="button"
-          className={styles.ghostBtn}
-          onClick={() => { onClose(); startGoogleOAuth("from-auth-dialog"); }}
-          aria-label="Continuar con Google"
-          style={{ marginTop: 8 }}
-        >
-          {/* Simple ícono G */}
-          <span className={styles.iconWrap} aria-hidden>
-            <svg viewBox="0 0 24 24" width="18" height="18">
-              <path d="M21.35 11.1h-9.9v2.98h5.8c-.25 1.5-1.73 4.4-5.8 4.4-3.5 0-6.36-2.9-6.36-6.4s2.86-6.4 6.36-6.4c2 0 3.36.85 4.13 1.58l2.8-2.7C16.83 2.6 14.6 1.7 12.25 1.7 6.9 1.7 2.6 6 2.6 11.35s4.3 9.65 9.65 9.65c5.58 0 9.25-3.92 9.25-9.45 0-.64-.07-1.1-.15-1.45z" fill="currentColor"/>
-            </svg>
-          </span>
-          Continuar con Google
-        </button>
-
+       
         <div className={styles.grid}>
           <Link href="/pedidos" className={styles.ghostBtn} onClick={onClose}>
             <span className={styles.iconWrap} aria-hidden>

@@ -55,11 +55,41 @@ export default function Header() {
     setIsUser(isUserFromToken());   // 👈 NUEVO
   }, []);
 
+  /* 🔹 NUEVO: estado inicial del contador desde localStorage al montar */
+  useEffect(() => {
+    try {
+      const saved = Number(localStorage.getItem("cart:count") || 0);
+      if (Number.isFinite(saved)) setCartCount(saved);
+    } catch {}
+  }, []);
+
   /* 👇 NUEVO: escucha global para actualizar contador */
   useEffect(() => {
     const onCount = (e: any) => setCartCount(e?.detail?.count ?? 0);
     window.addEventListener("cart:count", onCount as any);
     return () => window.removeEventListener("cart:count", onCount as any);
+  }, []);
+
+  /* 🔹 NUEVO: también escuchar el evento estándar cart:changed */
+  useEffect(() => {
+    const onChanged = (e: Event) => {
+      const ev = e as CustomEvent<{ count: number }>;
+      if (ev?.detail?.count !== undefined) setCartCount(ev.detail.count);
+    };
+    window.addEventListener("cart:changed", onChanged);
+    return () => window.removeEventListener("cart:changed", onChanged);
+  }, []);
+
+  /* 🔹 NUEVO: sync entre pestañas cuando cambie cart:count en localStorage */
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "cart:count") {
+        const v = Number(e.newValue || 0);
+        if (Number.isFinite(v)) setCartCount(v);
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   /* ✅ NUEVO: refrescar roles cuando haya login, cambios de token o navegación */
@@ -86,6 +116,14 @@ export default function Header() {
       window.removeEventListener("storage", onStorage);
     };
   }, [pathname]); // <- corre en cada navegación
+
+  /* 🔹 NUEVO: al navegar, re-lee el contador por si otra vista lo cambió */
+  useEffect(() => {
+    try {
+      const v = Number(localStorage.getItem("cart:count") || 0);
+      if (Number.isFinite(v)) setCartCount(v);
+    } catch {}
+  }, [pathname]);
 
   return (
     <>

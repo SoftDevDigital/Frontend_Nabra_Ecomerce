@@ -12,6 +12,7 @@
 
   background: var(--bg);
   color: var(--ink);
+  
 }
 
 .container{
@@ -140,3 +141,61 @@
   transition: filter .15s ease;
 }
 .icon:hover{ filter: brightness(.95); }
+
+
+/* === CTA premium === */
+.btnCTA{
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 22px;                /* un poco más grande que .btn */
+  font-weight: 800;
+  letter-spacing: .4px;
+  border: 1px solid transparent;     /* borde real lo da el gradient */
+  background:
+    linear-gradient(#fff,#fff) padding-box,
+    linear-gradient(135deg, var(--brand), var(--brand2)) border-box;
+  color: var(--ink);
+  box-shadow:
+    0 6px 18px rgba(0,0,0,.08),
+    inset 0 1px 0 rgba(255,255,255,.7);
+  backdrop-filter: saturate(1.1);
+  transition: transform .15s ease, box-shadow .2s ease, filter .15s ease;
+  text-transform: uppercase;
+  
+}
+
+.btnCTA:hover{
+  transform: translateY(-2px);
+  box-shadow:
+    0 10px 22px rgba(0,0,0,.12),
+    inset 0 1px 0 rgba(255,255,255,.85);
+  filter: brightness(1.02);
+}
+
+.btnCTA:active{
+  transform: translateY(0);
+  box-shadow: 0 6px 14px rgba(0,0,0,.1);
+}
+
+.btnCTA:focus-visible{
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 45%, #fff);
+  border-color: transparent;
+}
+
+/* Icono flecha animado */
+.btnIcon{
+  transform: translateX(0);
+  transition: transform .2s ease;
+}
+
+.btnCTA:hover .btnIcon{
+  transform: translateX(4px);
+}
+
+/* Opcional: centrar el CTA dentro del bloque cuando haga falta */
+@media (max-width: 880px){
+  .promoCtas{ justify-items: center; }
+}

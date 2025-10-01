@@ -108,21 +108,28 @@ export default function AuthPage() {
         </div>
 
         {/* 👇 NUEVO: botón Google arriba del formulario para ambos tabs */}
-        <div className={styles.socialRow} style={{ marginBottom: 12 }}>
-          <button
-            type="button"
-            className={styles.ghostBtn}
-            onClick={() => startGoogleOAuth(tab === "login" ? "from-login" : "from-register")}
-            aria-label="Continuar con Google"
-          >
-            <span className={styles.iconWrap} aria-hidden>
-              <svg viewBox="0 0 24 24" width="18" height="18">
-                <path d="M21.35 11.1h-9.9v2.98h5.8c-.25 1.5-1.73 4.4-5.8 4.4-3.5 0-6.36-2.9-6.36-6.4s2.86-6.4 6.36-6.4c2 0 3.36.85 4.13 1.58l2.8-2.7C16.83 2.6 14.6 1.7 12.25 1.7 6.9 1.7 2.6 6 2.6 11.35s4.3 9.65 9.65 9.65c5.58 0 9.25-3.92 9.25-9.45 0-.64-.07-1.1-.15-1.45z" fill="currentColor"/>
-              </svg>
-            </span>
-            Continuar con Google
-          </button>
-        </div>
+        {/* SOLO mostrar Google cuando el tab es "login" */}
+{tab === "login" && (
+  <div className={styles.socialRow}>
+    <button
+      type="button"
+      className={styles.googleBtn}
+      onClick={() => startGoogleOAuth("from-login")}
+      aria-label="Continuar con Google"
+    >
+      <span className={styles.googleIcon} aria-hidden>
+        {/* Logo Google multicolor (brand safe) */}
+        <svg viewBox="0 0 48 48" width="20" height="20">
+          <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.6 31.9 29.2 35 24 35c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.7 1.1 7.8 3l5.7-5.7C33.6 5 28.9 3 24 3 12.9 3 4 11.9 4 23s8.9 20 20 20 19-8.9 19-20c0-1.3-.1-2.2-.4-3.5z"/>
+          <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.9 16.4 19.1 13 24 13c3 0 5.7 1.1 7.8 3l5.7-5.7C33.6 5 28.9 3 24 3 16.5 3 9.9 7.3 6.3 14.7z"/>
+          <path fill="#4CAF50" d="M24 43c5.1 0 9.8-1.9 13.3-5.1l-6.1-4.9C29 34.8 26.6 36 24 36c-5.1 0-9.4-3.1-11.2-7.6l-6.6 5.1C9.8 38.7 16.4 43 24 43z"/>
+          <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3C34.6 31.9 30.7 36 24 36c-5.1 0-9.4-3.1-11.2-7.6l-6.6 5.1C9.8 38.7 16.4 43 24 43c8.4 0 19-5.7 19-20 0-1.3-.1-2.2-.4-3.5z"/>
+        </svg>
+      </span>
+      <span className={styles.googleText}>Continuar con Google</span>
+    </button>
+  </div>
+)}
 
         {tab==="login" ? (
           <form className={styles.form} onSubmit={handleLogin}>

@@ -110,3 +110,55 @@ export async function cancelPayment(paymentId: string) {
   }
   return res;
 }
+
+/* ==================== MP: checkout con envío en el body (V2) ==================== */
+
+/** Estructura que tu backend espera bajo body.simpleShipping */
+export type SimpleShipping = {
+  contact: {
+    emailOrPhone?: string;
+    firstName?: string;
+    lastName?: string;
+    phone?: string;
+  };
+  address: {
+    country: string;      // "MX"
+    state: string;        // ej: "Ciudad de México"
+    city: string;         // ej: "Ciudad de México"
+    postalCode: string;   // ej: "01000"
+    addressLine: string;  // ej: "Av. Siempre Viva 742, Dpto 4B"
+  };
+};
+
+/** Args para la versión que manda success/failure/pending + simpleShipping en el body */
+export type CreateMPCheckoutArgs = {
+  successUrl: string;
+  failureUrl: string;
+  pendingUrl: string;
+  simpleShipping?: SimpleShipping;
+};
+
+/**
+ * V2 (no rompe el helper existente):
+ * POST /payments/mercadopago/checkout   (con success/failure/pending y simpleShipping en el body)
+ *
+ * Úsalo cuando necesites adjuntar la info de envío MX al crear la preferencia:
+ *   createMercadoPagoCheckoutV2({ successUrl, failureUrl, pendingUrl, simpleShipping })
+ */
+export async function createMercadoPagoCheckoutV2(
+  args: CreateMPCheckoutArgs
+): Promise<MPCheckoutResponse> {
+  const body = {
+    successUrl: args.successUrl,
+    failureUrl: args.failureUrl,
+    pendingUrl: args.pendingUrl,
+    ...(args.simpleShipping ? { simpleShipping: args.simpleShipping } : {}),
+  };
+
+  // Reutilizamos tu apiFetch para mantener headers, auth y base URL consistentes
+  const r = await apiFetch<MPCheckoutResponse>(`/payments/mercadopago/checkout`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return r;
+}

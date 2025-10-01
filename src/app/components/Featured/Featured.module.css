@@ -145,3 +145,79 @@
 @keyframes pulse{
   0%{ opacity:.6 } 50%{ opacity:1 } 100%{ opacity:.6 }
 }
+
+/* === CTA “Ver catálogo completo” premium === */
+.moreRow{
+  display: flex;
+  justify-content: center;          /* centrado elegante */
+  padding: 18px 2px 28px;
+}
+
+.moreCta{
+  --ink:#111;
+  --g1:#b4cfd8;                     /* mismo tono que el footer */
+  --g2:#d5c4aa;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 22px;
+  border-radius: 999px;
+  font-weight: 800;
+  letter-spacing: .3px;
+  text-decoration: none;
+  color: var(--ink);
+
+  /* “borde degradado” + fondo blanco (glass suave) */
+  border: 1px solid transparent;
+  background:
+    linear-gradient(#fff, #fff) padding-box,
+    linear-gradient(135deg, var(--g1), var(--g2)) border-box;
+
+  box-shadow:
+    0 6px 18px rgba(0,0,0,.06),
+    inset 0 1px 0 rgba(255,255,255,.85);
+
+  transition: transform .15s ease, box-shadow .2s ease, filter .15s ease, background-color .2s ease;
+}
+
+.moreCta:hover{
+  transform: translateY(-2px);
+  filter: brightness(1.02);
+  box-shadow: 0 10px 22px rgba(0,0,0,.12), inset 0 1px 0 rgba(255,255,255,.9);
+}
+
+.moreCta:active{
+  transform: translateY(0);
+  box-shadow: 0 6px 14px rgba(0,0,0,.1);
+}
+
+.moreCta:focus-visible{
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--g1) 45%, #fff);
+}
+
+.moreIcon{
+  transform: translateX(0);
+  transition: transform .2s ease;
+}
+.moreCta:hover .moreIcon{
+  transform: translateX(4px);
+}
+
+/* Mobile: ancho completo y tipografía un poquito más grande */
+@media (max-width: 520px){
+  .moreCta{
+    width: 100%;
+    justify-content: center;
+    padding: 14px 20px;
+    font-size: 15px;
+  }
+}
+.moreCta:hover{
+  background:
+    linear-gradient(#111,#111) padding-box,
+    linear-gradient(135deg, var(--g1), var(--g2)) border-box;
+  color: #fff;
+  transform: translateY(-2px);
+}

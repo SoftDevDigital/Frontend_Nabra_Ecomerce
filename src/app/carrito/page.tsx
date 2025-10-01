@@ -249,6 +249,8 @@ function getMpRedirectUrl(resp: any): string | undefined {
   );
 }
 
+
+
 /* ===== Página ===== */
 export default function CartPage() {
   const [loading, setLoading] = useState(true);
@@ -804,33 +806,69 @@ const isMxAddressValid =
     } finally { setRemovingId(null); }
   }
 
+  function buildSimpleShippingMX(): import("@/lib/paymentsApi").SimpleShipping {
+  return {
+    contact: {
+      emailOrPhone: (mxEmail || mxPhone || "").trim() || undefined,
+      firstName: (mxName || "").trim() || undefined,
+      lastName: (mxLastname || "").trim() || undefined,
+      phone: (mxPhone || "").trim() || undefined,
+    },
+    address: {
+      country: "MX",
+      state: mxState,
+      city: mxCity.trim(),
+      postalCode: mxZip.trim(),
+      addressLine: mxStreet.trim(),
+    },
+  };
+}
+
   // 🆕 MP: pagar directo desde /carrito (crea preferencia y redirige)
-  async function handlePayWithMercadoPago() {
-    setPayMsg(null);
-    if (items.length === 0) { setPayMsg("El carrito está vacío"); return; }
-    try {
-      setPayingMp(true);
-      const origin = typeof window !== "undefined" ? window.location.origin : (process.env.NEXT_PUBLIC_SITE_BASE || "");
-      const successUrl = `${origin}/payments/mercadopago/return?source=checkout`;
-      const failureUrl = `${origin}/payments/mercadopago/return?source=checkout`;
-      const pendingUrl = `${origin}/payments/mercadopago/return?source=checkout`;
-      const pref = await createMercadoPagoCheckout({ successUrl, failureUrl, pendingUrl });
+ async function handlePayWithMercadoPago() {
+  setPayMsg(null);
 
-      // 👇 nuevo: normalizar respuesta
-      console.debug("MP checkout resp:", pref);
-      const redirectUrl = getMpRedirectUrl(pref);
-      if (!redirectUrl) throw new Error("No se recibió la URL de pago");
+  if (items.length === 0) { setPayMsg("El carrito está vacío"); return; }
 
-      window.location.href = redirectUrl;
-    } catch (e: any) {
-      const m = String(e?.message || "No se pudo iniciar el pago con Mercado Pago");
-      setPayMsg(m);
-      if (m.toLowerCase().includes("no autenticado") || m.toLowerCase().includes("credenciales")) {
-        router.push(`/auth?redirectTo=/carrito`);
-      }
-    } finally { setPayingMp(false); }
+  // Validación mínima: necesitamos dirección MX válida para adjuntarla al checkout
+  if (!isMxAddressValid) {
+    setPayMsg("Completá calle, ciudad, CP y estado de México antes de pagar.");
+    return;
+  }
+  // Al menos un dato de contacto
+  if (!mxEmail.trim() && !mxPhone.trim()) {
+    setPayMsg("Ingresá un email o teléfono de contacto.");
+    return;
   }
 
+  try {
+    setPayingMp(true);
+    const origin = typeof window !== "undefined" ? window.location.origin : (process.env.NEXT_PUBLIC_SITE_BASE || "");
+    const successUrl = `${origin}/payments/mercadopago/return?source=checkout`;
+    const failureUrl = `${origin}/payments/mercadopago/return?source=checkout`;
+    const pendingUrl = `${origin}/payments/mercadopago/return?source=checkout`;
+
+    const simpleShipping = buildSimpleShippingMX();
+
+    // ⬇️ ahora sí, mandamos simpleShipping al backend
+    const pref = await createMercadoPagoCheckout({ successUrl, failureUrl, pendingUrl, simpleShipping });
+
+    console.debug("MP checkout resp:", pref);
+    const redirectUrl = getMpRedirectUrl(pref);
+    if (!redirectUrl) throw new Error("No se recibió la URL de pago");
+
+    // Redirigir a Mercado Pago
+    window.location.href = redirectUrl;
+  } catch (e: any) {
+    const m = String(e?.message || "No se pudo iniciar el pago con Mercado Pago");
+    setPayMsg(m);
+    if (m.toLowerCase().includes("no autenticado") || m.toLowerCase().includes("credenciales")) {
+      router.push(`/auth?redirectTo=/carrito`);
+    }
+  } finally {
+    setPayingMp(false);
+  }
+}
   async function handleClearCart() {
     setClearMsg(null); setClearing(true);
     try {
