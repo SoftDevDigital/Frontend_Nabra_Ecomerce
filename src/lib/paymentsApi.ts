@@ -134,7 +134,6 @@ export type SimpleShipping = {
 export type CreateMPCheckoutArgs = {
   simpleShipping?: SimpleShipping;
   couponCode?: string;
-  currencyId?: string; // 👈 NUEVO: forzamos la moneda para MP (MXN)
 };
 
 /**
@@ -147,7 +146,6 @@ export async function createMercadoPagoCheckoutV2(
   const body: any = {};
   if (args.simpleShipping) body.simpleShipping = args.simpleShipping;
   if (args.couponCode) body.couponCode = args.couponCode;
-  if (args.currencyId) body.currencyId = args.currencyId; // 👈 NUEVO
 
   const r = await apiFetch<MPCheckoutResponse>(`/payments/mercadopago/checkout`, {
     method: "POST",

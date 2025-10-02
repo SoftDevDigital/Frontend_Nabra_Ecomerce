@@ -1002,7 +1002,7 @@ async function handlePayWithMercadoPago() {
 
     const pref = await createMercadoPagoCheckoutV2({
   simpleShipping,        // ✔ datos de envío
-  currencyId: "MXN",     // 👈 NUEVO: evitamos currency_id invalid
+      // 👈 NUEVO: evitamos currency_id invalid
   // couponCode: couponCode?.trim() || undefined, // si aplica
 });
 
