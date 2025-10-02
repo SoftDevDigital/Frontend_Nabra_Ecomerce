@@ -5,7 +5,7 @@ import Link from "next/link";
 import { calculateShipping, getShippingServices } from "@/lib/shippingApi";
 import { useRouter } from "next/navigation";
 import s from "./Cart.module.css";
-import { createMercadoPagoCheckout } from "@/lib/paymentsApi"; // 🆕 MP: crear preferencia
+import { createMercadoPagoCheckoutV2 } from "@/lib/paymentsApi";
 import { setCartBadgeCount, computeItemsCount } from "@/lib/cartBadge";
 
 
@@ -977,21 +977,63 @@ async function handleRemoveItem(itemId: string) {
 }
 
   // 🆕 MP: pagar directo desde /carrito (crea preferencia y redirige)
- async function handlePayWithMercadoPago() {
+async function handlePayWithMercadoPago() {
   setPayMsg(null);
 
-  if (items.length === 0) { setPayMsg("El carrito está vacío"); return; }
-
-  // Validación mínima: necesitamos dirección MX válida para adjuntarla al checkout
+  // 1) Validaciones básicas
+  if (items.length === 0) {
+    setPayMsg("El carrito está vacío");
+    return;
+  }
   if (!isMxAddressValid) {
     setPayMsg("Completá calle, ciudad, CP y estado de México antes de pagar.");
     return;
   }
-  // Al menos un dato de contacto
   if (!mxEmail.trim() && !mxPhone.trim()) {
     setPayMsg("Ingresá un email o teléfono de contacto.");
     return;
   }
+
+  try {
+    setPayingMp(true);
+
+    // 2) URLs de retorno (usá tus rutas actuales)
+    const origin =
+      typeof window !== "undefined"
+        ? window.location.origin
+        : (process.env.NEXT_PUBLIC_SITE_BASE || "");
+    const successUrl = `${origin}/payments/mercadopago/return?source=checkout`;
+    const failureUrl = `${origin}/payments/mercadopago/return?source=checkout`;
+    const pendingUrl = `${origin}/payments/mercadopago/return?source=checkout`;
+
+    // 3) Construir shipping a enviar en el body
+    const simpleShipping = buildSimpleShippingMX();
+
+    // 4) Crear preferencia con V2 (envía body con simpleShipping)
+    const pref = await createMercadoPagoCheckoutV2({
+      successUrl,
+      failureUrl,
+      pendingUrl,
+      simpleShipping, // ✅ viaja en el body
+    });
+
+    // 5) Redirigir a la URL que devuelva el backend/MP
+    const redirectUrl = getMpRedirectUrl(pref);
+    if (!redirectUrl) {
+      throw new Error("No se recibió la URL de pago");
+    }
+    window.location.href = redirectUrl;
+  } catch (e: any) {
+    const m = String(e?.message || "No se pudo iniciar el pago con Mercado Pago");
+    setPayMsg(m);
+    if (/no autenticado|credenciales|401/i.test(m)) {
+      router.push(`/auth?redirectTo=/carrito`);
+    }
+  } finally {
+    setPayingMp(false);
+  }
+}
+
 
   try {
     setPayingMp(true);
