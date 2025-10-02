@@ -12,6 +12,12 @@ type Payload = {
   message: string;
 };
 
+/* ⬇️⬇️⬇️ AGREGADO: helper para base de API del backend */
+function getApiBase() {
+  return process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3001";
+}
+/* ⬆️⬆️⬆️ */
+
 export default function ContactoPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -39,21 +45,62 @@ export default function ContactoPage() {
         message: message.trim(),
       };
 
-      // Intenta enviar a un endpoint propio si lo tenés.
-      // Si no existe, igual mostramos el "enviado" para la demo.
-      const res = await fetch("/api/contact", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      }).catch(() => null as any);
+      /* ⬇️⬇️⬇️ AGREGADO: intento directo al backend /contact con { comment } */
+      const backendBody = {
+        name: payload.name,
+        email: payload.email,
+        phone: payload.phone,
+        comment: payload.message, // 👈 el backend espera "comment"
+      };
 
-      if (!res || !("ok" in res) || !res.ok) {
-        // fallback “optimista” para que el flujo no se rompa en local
-        console.info("[Contacto] payload:", payload);
-        setResult({ ok: true, text: "¡Mensaje enviado! Te responderemos a la brevedad." });
-      } else {
-        const txt = (await res.text()) || "¡Mensaje enviado! Te responderemos a la brevedad.";
-        setResult({ ok: true, text: txt });
+      let sent = false;
+      try {
+        const resBE = await fetch(`${getApiBase()}/contact`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(backendBody),
+        });
+
+        // intentamos parsear; si no hay JSON igual mostramos OK
+        let msgText = "¡Mensaje enviado! Te responderemos a la brevedad.";
+        try {
+          const data = await resBE.json().catch(() => null);
+          if (data && (data.message || data.msg)) {
+            msgText = String(data.message || data.msg);
+          }
+        } catch {
+          /* noop */
+        }
+
+        if (!resBE.ok) {
+          // si el backend responde error, lo mostramos y caemos al fallback
+          throw new Error(msgText || "No se pudo enviar desde el backend.");
+        }
+
+        setResult({ ok: true, text: msgText });
+        sent = true;
+      } catch (err) {
+        // seguimos al fallback local si el BE no está disponible
+        console.info("[Contacto] Backend /contact falló, usando fallback /api/contact. Error:", err);
+      }
+      /* ⬆️⬆️⬆️ FIN agregado backend */
+
+      // Fallback a tu endpoint local (como lo tenías)
+      if (!sent) {
+        const res = await fetch("/api/contact", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }).catch(() => null as any);
+
+        if (!res || !("ok" in res) || !res.ok) {
+          // fallback “optimista” para que el flujo no se rompa en local
+          console.info("[Contacto] payload:", payload);
+          setResult({ ok: true, text: "¡Mensaje enviado! Te responderemos a la brevedad." });
+        } else {
+          const txt = (await res.text()) || "¡Mensaje enviado! Te responderemos a la brevedad.";
+          setResult({ ok: true, text: txt });
+        }
       }
 
       setName(""); setEmail(""); setPhone(""); setMessage("");

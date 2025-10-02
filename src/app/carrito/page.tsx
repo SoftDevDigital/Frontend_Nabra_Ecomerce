@@ -6,6 +6,8 @@ import { calculateShipping, getShippingServices } from "@/lib/shippingApi";
 import { useRouter } from "next/navigation";
 import s from "./Cart.module.css";
 import { createMercadoPagoCheckout } from "@/lib/paymentsApi"; // 🆕 MP: crear preferencia
+import { setCartBadgeCount, computeItemsCount } from "@/lib/cartBadge";
+
 
 /* ===== Tipos base ===== */
 type CartProduct = {
@@ -368,7 +370,7 @@ const MX_STATES = [
 
 // === MX: formulario previo al pago =========================
 const [mxEmail, setMxEmail] = useState("");
-const [mxName, setMxName]   = useState("Jane");
+const [mxName, setMxName]   = useState("");
 const [mxLastname, setMxLastname] = useState("");
 const [mxPhone, setMxPhone] = useState("");
 
@@ -665,28 +667,55 @@ const isMxAddressValid =
     return { _id: payload?._id, userId: payload?.userId, items: normalizedItems, total, totalItems, discounts: Array.isArray(payload?.discounts) ? payload.discounts : undefined, finalTotal };
   }
 
-  async function loadCart() {
-    setLoading(true); setErr(null);
+ async function loadCart() {
+  setLoading(true);
+  setErr(null);
+  try {
+    const r = await apiFetch<CartResponse>("/cart", { method: "GET" });
+    const cart = normalizeCart(r);
+
+    setItems(cart.items || []);
+    setCartId(cart._id ?? null);
+    setCartTotal(cart.total ?? null);
+    setCartTotalItems(cart.totalItems ?? null);
+    setCartDiscounts(cart.discounts ?? []);
+    setCartFinalTotal(cart.finalTotal ?? null);
+
+    const next: Record<string, { quantity: number; size: string }> = {};
+    (cart.items || []).forEach((it) => {
+      next[it._id] = {
+        quantity: Number(it.quantity) || 1,
+        size: (it.size ?? "").toString(),
+      };
+    });
+    setEdits(next);
+
+    // ✅ NUEVO: sincronizar contador global del carrito
+    const computedCount =
+      typeof cart.totalItems === "number"
+        ? cart.totalItems
+        : (cart.items || []).reduce((acc, it) => acc + (Number(it.quantity) || 0), 0);
+
     try {
-      const r = await apiFetch<CartResponse>("/cart", { method: "GET" });
-      const cart = normalizeCart(r);
-      setItems(cart.items || []);
-      setCartId(cart._id ?? null);
-      setCartTotal(cart.total ?? null);
-      setCartTotalItems(cart.totalItems ?? null);
-      setCartDiscounts(cart.discounts ?? []);
-      setCartFinalTotal(cart.finalTotal ?? null);
-      const next: Record<string, { quantity: number; size: string }> = {};
-      (cart.items || []).forEach((it) => { next[it._id] = { quantity: Number(it.quantity) || 1, size: (it.size ?? "").toString() }; });
-      setEdits(next);
-    } catch (e: any) {
-      const msg = e?.message || "Error al cargar el carrito";
-      setErr(msg);
-      if (msg.toLowerCase().includes("no autenticado") || msg.toLowerCase().includes("credenciales")) {
-        window.location.href = "/auth?redirectTo=/carrito";
-      }
-    } finally { setLoading(false); }
+      localStorage.setItem("cart:count", String(computedCount));
+    } catch {}
+
+    // Eventos que ya escucha el Header
+    try {
+      window.dispatchEvent(new CustomEvent("cart:count", { detail: { count: computedCount } }));
+      window.dispatchEvent(new CustomEvent("cart:changed", { detail: { count: computedCount, source: "loadCart" } }));
+    } catch {}
+  } catch (e: any) {
+    const msg = e?.message || "Error al cargar el carrito";
+    setErr(msg);
+    if (msg.toLowerCase().includes("no autenticado") || msg.toLowerCase().includes("credenciales")) {
+      window.location.href = "/auth?redirectTo=/carrito";
+    }
+  } finally {
+    setLoading(false);
   }
+}
+
   useEffect(() => { loadCart(); }, []);
 
   async function loadCartSummary(withCoupon?: string) {
@@ -718,23 +747,81 @@ const isMxAddressValid =
   }
 
   async function handleAddToCart(e: React.FormEvent) {
-    e.preventDefault();
-    setAddMsg(null); setAdding(true);
+  e.preventDefault();
+  setAddMsg(null);
+  setAdding(true);
+
+  try {
+    const qty = Math.max(1, Number(addQty) || 1);
+    const payload: Record<string, any> = {
+      productId: addProductId.trim(),
+      quantity: qty,
+    };
+    const s = addSize.trim();
+    const c = addColor.trim();
+    if (s) payload.size = s;
+    if (c) payload.color = c;
+
+    const r = await apiFetch<AddToCartResponse | CartResponse>("/cart/add", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+
+    // Mensaje / total de $ si el backend lo devuelve
+    if ((r as AddToCartResponse)?.cartTotal !== undefined) {
+      const ar = r as AddToCartResponse;
+      setCartTotal(ar.cartTotal);
+      setAddMsg(ar.message || "Producto agregado 👍");
+    } else {
+      setAddMsg("Producto agregado 👍");
+    }
+
+    // ✅ NUEVO: actualización optimista del contador (badge)
+    const currentCount =
+      typeof cartTotalItems === "number"
+        ? cartTotalItems
+        : items.reduce((acc, it) => acc + (Number(it.quantity) || 0), 0);
+
+    const optimisticCount = currentCount + qty;
+
     try {
-      const payload: Record<string, any> = { productId: addProductId.trim(), quantity: Number(addQty) || 1 };
-      const s = addSize.trim(); const c = addColor.trim();
-      if (s) payload.size = s; if (c) payload.color = c;
-      const r = await apiFetch<AddToCartResponse | CartResponse>("/cart/add", { method: "POST", body: JSON.stringify(payload) });
-      if ((r as AddToCartResponse)?.cartTotal !== undefined) {
-        const ar = r as AddToCartResponse;
-        setCartTotal(ar.cartTotal);
-        setAddMsg(ar.message || "Producto agregado 👍");
-      } else { setAddMsg("Producto agregado 👍"); }
-      await loadCart();
-      setAddQty(1);
-    } catch (e: any) { const msg = e?.message || "No se pudo agregar"; setAddMsg(msg); }
-    finally { setAdding(false); }
+      localStorage.setItem("cart:count", String(optimisticCount));
+      // si guardás también un totalItems en estado, lo reflejamos
+      setCartTotalItems(optimisticCount);
+    } catch {}
+
+    try {
+      window.dispatchEvent(
+        new CustomEvent("cart:count", { detail: { count: optimisticCount } })
+      );
+      window.dispatchEvent(
+        new CustomEvent("cart:changed", {
+          detail: { count: optimisticCount, source: "add" },
+        })
+      );
+    } catch {}
+
+    // Refrescar estado real desde el backend
+    await loadCart();
+
+    // Reset de campos de form
+    setAddQty(1);
+    // opcional: si querés limpiar talle/color tras agregar
+    // setAddSize(""); setAddColor("");
+    // opcional: si querés limpiar productId en el form de prueba
+    // setAddProductId("");
+  } catch (e: any) {
+    const msg = e?.message || "No se pudo agregar";
+    setAddMsg(msg);
+
+    if (/no autenticado|token|401|credenciales/i.test(String(msg))) {
+      window.location.href = "/auth?redirectTo=/carrito";
+      return;
+    }
+  } finally {
+    setAdding(false);
   }
+}
 
  async function handleUpdateItem(itemId: string) {
   setUpdateMsg(null);
@@ -775,6 +862,7 @@ const isMxAddressValid =
     }
 
     await loadCart();
+    setCartBadgeCount(computeItemsCount(items));
   } catch (e: any) {
     setUpdateMsg(e?.message || "No se pudo actualizar el ítem");
   } finally {
@@ -783,28 +871,92 @@ const isMxAddressValid =
 }
 
 
-  async function handleRemoveItem(itemId: string) {
-    setRemoveMsg(null); setRemovingId(itemId);
+  // Ponelo una vez (arriba del archivo o en tus utils)
+const computeItemsCount = (its: CartItem[] = []) =>
+  its.reduce((acc, it) => acc + (Number(it.quantity) || 0), 0);
+
+async function handleRemoveItem(itemId: string) {
+  setRemoveMsg(null);
+  setRemovingId(itemId);
+
+  // ✅ OPTIMISTA: bajar el contador apenas el usuario hace click
+  try {
+    const toRemoveQty = items.find(i => i._id === itemId)?.quantity ?? 0;
+    const currentCount =
+      typeof cartTotalItems === "number" ? cartTotalItems : computeItemsCount(items);
+    const optimistic = Math.max(0, currentCount - Number(toRemoveQty || 0));
+
+    localStorage.setItem("cart:count", String(optimistic));
+    setCartTotalItems(optimistic);
+
+    window.dispatchEvent(new CustomEvent("cart:count", { detail: { count: optimistic } }));
+    window.dispatchEvent(
+      new CustomEvent("cart:changed", { detail: { count: optimistic, source: "remove", itemId } })
+    );
+  } catch {}
+
+  try {
+    const r = await apiFetch<RemoveCartItemResponse | CartResponse>(
+      `/cart/remove/${itemId}`,
+      { method: "DELETE" }
+    );
+
+    const cart = normalizeCart(r as any);
+
+    setItems(cart.items || []);
+    setCartId(cart._id ?? null);
+    setCartTotal(cart.total ?? null);
+    setCartDiscounts(cart.discounts ?? []);
+    setCartFinalTotal(cart.finalTotal ?? null);
+
+    // 🔢 Recalcular el total de ítems (servidor gana)
+    const realCount =
+      typeof cart.totalItems === "number"
+        ? cart.totalItems
+        : computeItemsCount(cart.items || []);
+    setCartTotalItems(realCount);
+
+    // 🔄 Persistir + notificar (servidor gana)
     try {
-      const r = await apiFetch<RemoveCartItemResponse | CartResponse>(`/cart/remove/${itemId}`, { method: "DELETE" });
-      const cart = normalizeCart(r as any);
-      setItems(cart.items || []);
-      setCartId(cart._id ?? null);
-      setCartTotal(cart.total ?? null);
-      setCartTotalItems(cart.totalItems ?? (cart.items?.length ?? 0));
-      setCartDiscounts(cart.discounts ?? []);
-      setCartFinalTotal(cart.finalTotal ?? null);
-      const next: Record<string, { quantity: number; size: string }> = {};
-      (cart.items || []).forEach((it) => { next[it._id] = { quantity: Number(it.quantity) || 1, size: (it.size ?? "").toString() }; });
-      setEdits(next);
-      setRemoveMsg(("message" in (r as any) && (r as any).message) || "Ítem eliminado 🗑️");
-    } catch (e: any) {
-      setRemoveMsg(e?.message || "No se pudo eliminar el ítem");
-      if (String(e?.message || "").toLowerCase().includes("no autenticado")) {
-        window.location.href = "/auth?redirectTo=/carrito";
-      }
-    } finally { setRemovingId(null); }
+      localStorage.setItem("cart:count", String(realCount));
+      window.dispatchEvent(new CustomEvent("cart:count", { detail: { count: realCount } }));
+      window.dispatchEvent(
+        new CustomEvent("cart:changed", { detail: { count: realCount, source: "remove:server", itemId } })
+      );
+    } catch {}
+
+    // refrescar controles de edición
+    const next: Record<string, { quantity: number; size: string }> = {};
+    (cart.items || []).forEach((it) => {
+      next[it._id] = {
+        quantity: Number(it.quantity) || 1,
+        size: (it.size ?? "").toString(),
+      };
+    });
+    setEdits(next);
+
+    setRemoveMsg(("message" in (r as any) && (r as any).message) || "Ítem eliminado 🗑️");
+  } catch (e: any) {
+    setRemoveMsg(e?.message || "No se pudo eliminar el ítem");
+    // Revertir optimismo si falló
+    try {
+      const fallback =
+        typeof cartTotalItems === "number" ? cartTotalItems : computeItemsCount(items);
+      localStorage.setItem("cart:count", String(fallback));
+      window.dispatchEvent(new CustomEvent("cart:count", { detail: { count: fallback } }));
+      window.dispatchEvent(
+        new CustomEvent("cart:changed", { detail: { count: fallback, source: "remove:error", itemId } })
+      );
+    } catch {}
+
+    if (String(e?.message || "").toLowerCase().includes("no autenticado")) {
+      window.location.href = "/auth?redirectTo=/carrito";
+    }
+  } finally {
+    setRemovingId(null);
   }
+}
+
 
   function buildSimpleShippingMX(): import("@/lib/paymentsApi").SimpleShipping {
   return {
@@ -1932,10 +2084,10 @@ const isMxAddressValid =
           onChange={(e)=>setMxPhone(e.target.value)}
           style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
         />
-        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+        {/*<label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
           <input type="checkbox" checked={mxSaveForNext} onChange={()=>setMxSaveForNext(v=>!v)} />
           Guardar mi información para la próxima vez
-        </label>
+        </label>*/}
       </div>
     </div>
 
