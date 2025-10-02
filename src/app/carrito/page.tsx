@@ -980,15 +980,14 @@ async function handleRemoveItem(itemId: string) {
 async function handlePayWithMercadoPago() {
   setPayMsg(null);
 
-  // 1) Validaciones básicas
-  if (items.length === 0) {
-    setPayMsg("El carrito está vacío");
-    return;
-  }
+  if (items.length === 0) { setPayMsg("El carrito está vacío"); return; }
+
+  // Validación mínima: necesitamos dirección MX válida para adjuntarla al checkout
   if (!isMxAddressValid) {
     setPayMsg("Completá calle, ciudad, CP y estado de México antes de pagar.");
     return;
   }
+  // Al menos un dato de contacto
   if (!mxEmail.trim() && !mxPhone.trim()) {
     setPayMsg("Ingresá un email o teléfono de contacto.");
     return;
@@ -997,31 +996,30 @@ async function handlePayWithMercadoPago() {
   try {
     setPayingMp(true);
 
-    // 2) URLs de retorno (usá tus rutas actuales)
     const origin =
       typeof window !== "undefined"
         ? window.location.origin
         : (process.env.NEXT_PUBLIC_SITE_BASE || "");
+
     const successUrl = `${origin}/payments/mercadopago/return?source=checkout`;
     const failureUrl = `${origin}/payments/mercadopago/return?source=checkout`;
     const pendingUrl = `${origin}/payments/mercadopago/return?source=checkout`;
 
-    // 3) Construir shipping a enviar en el body
+    // ✅ construir y enviar el shipping en el body
     const simpleShipping = buildSimpleShippingMX();
 
-    // 4) Crear preferencia con V2 (envía body con simpleShipping)
     const pref = await createMercadoPagoCheckoutV2({
       successUrl,
       failureUrl,
       pendingUrl,
-      simpleShipping, // ✅ viaja en el body
+      simpleShipping, // viaja en el body
     });
 
-    // 5) Redirigir a la URL que devuelva el backend/MP
+    console.debug("MP checkout resp:", pref);
     const redirectUrl = getMpRedirectUrl(pref);
-    if (!redirectUrl) {
-      throw new Error("No se recibió la URL de pago");
-    }
+    if (!redirectUrl) throw new Error("No se recibió la URL de pago");
+
+    // Redirigir a Mercado Pago
     window.location.href = redirectUrl;
   } catch (e: any) {
     const m = String(e?.message || "No se pudo iniciar el pago con Mercado Pago");
@@ -1034,35 +1032,6 @@ async function handlePayWithMercadoPago() {
   }
 }
 
-
-  try {
-    setPayingMp(true);
-    const origin = typeof window !== "undefined" ? window.location.origin : (process.env.NEXT_PUBLIC_SITE_BASE || "");
-    const successUrl = `${origin}/payments/mercadopago/return?source=checkout`;
-    const failureUrl = `${origin}/payments/mercadopago/return?source=checkout`;
-    const pendingUrl = `${origin}/payments/mercadopago/return?source=checkout`;
-
-    const simpleShipping = buildSimpleShippingMX();
-
-    // ⬇️ ahora sí, mandamos simpleShipping al backend
-    const pref = await createMercadoPagoCheckout({ successUrl, failureUrl, pendingUrl, simpleShipping });
-
-    console.debug("MP checkout resp:", pref);
-    const redirectUrl = getMpRedirectUrl(pref);
-    if (!redirectUrl) throw new Error("No se recibió la URL de pago");
-
-    // Redirigir a Mercado Pago
-    window.location.href = redirectUrl;
-  } catch (e: any) {
-    const m = String(e?.message || "No se pudo iniciar el pago con Mercado Pago");
-    setPayMsg(m);
-    if (m.toLowerCase().includes("no autenticado") || m.toLowerCase().includes("credenciales")) {
-      router.push(`/auth?redirectTo=/carrito`);
-    }
-  } finally {
-    setPayingMp(false);
-  }
-}
   async function handleClearCart() {
     setClearMsg(null); setClearing(true);
     try {
