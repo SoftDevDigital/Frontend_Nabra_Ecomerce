@@ -7,7 +7,9 @@ import Header from "./components/Header/Header";
 export const metadata: Metadata = {
   title: "NABRA | Calzado",
   description: "Pasos que inspiran, zapatos que enamoran.",
-  icons: { icon: "/favicon.ico" },
+  icons: {
+    icon: "/logoNabra.png", // 👈 tu favicon
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -34,6 +34,10 @@ function hasRole(roleName: string): boolean {
 function isAdminFromToken(): boolean { return hasRole("admin"); }
 /* 👇 NUEVO: detectar rol user */
 function isUserFromToken(): boolean { return hasRole("user"); }
+// 👇 NUEVO: logged-in simple
+function isLoggedIn(): boolean {
+  try { return !!localStorage.getItem("nabra_token"); } catch { return false; }
+}
 
 export default function Header() {
   const pathname = usePathname();
@@ -50,9 +54,13 @@ export default function Header() {
   /* 👇 NUEVO: contador de carrito (opcional) */
   const [cartCount, setCartCount] = useState(0);
 
+  // 👇 NUEVO: sesión
+  const [logged, setLogged] = useState(false);
+
   useEffect(() => { 
     setIsAdmin(isAdminFromToken()); 
     setIsUser(isUserFromToken());   // 👈 NUEVO
+    setLogged(isLoggedIn());
   }, []);
 
   /* 🔹 NUEVO: estado inicial del contador desde localStorage al montar */
@@ -87,6 +95,11 @@ export default function Header() {
         const v = Number(e.newValue || 0);
         if (Number.isFinite(v)) setCartCount(v);
       }
+      if (e.key === "nabra_token") {
+        setIsAdmin(isAdminFromToken());
+        setIsUser(isUserFromToken());
+        setLogged(isLoggedIn());
+      }
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
@@ -97,23 +110,19 @@ export default function Header() {
     const refreshRoles = () => {
       setIsAdmin(isAdminFromToken());
       setIsUser(isUserFromToken());
+      setLogged(isLoggedIn());
     };
 
-    // 1) cuando cualquier parte del sitio dispare auth:login
+    // 1) cuando cualquier parte del sitio dispare auth:login/logout
     window.addEventListener("auth:login", refreshRoles as any);
+    window.addEventListener("auth:logout", refreshRoles as any);
 
-    // 2) si otro tab escribe el token
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === "nabra_token") refreshRoles();
-    };
-    window.addEventListener("storage", onStorage);
-
-    // 3) al cambiar de ruta, por si llegamos a /perfil sin haber refrescado
+    // 3) al cambiar de ruta
     refreshRoles();
 
     return () => {
       window.removeEventListener("auth:login", refreshRoles as any);
-      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("auth:logout", refreshRoles as any);
     };
   }, [pathname]); // <- corre en cada navegación
 
@@ -124,6 +133,14 @@ export default function Header() {
       if (Number.isFinite(v)) setCartCount(v);
     } catch {}
   }, [pathname]);
+
+  // 👇 NUEVO: logout para usar en el drawer móvil
+  function handleLogoutFromDrawer() {
+    try { localStorage.removeItem("nabra_token"); window.dispatchEvent(new Event("auth:logout")); } catch {}
+    setOpenMenu(false);
+    router.push("/");
+    router.refresh?.();
+  }
 
   return (
     <>
@@ -282,6 +299,27 @@ export default function Header() {
                   <li><Link href="/admin/pedidos" onClick={() => setOpenMenu(false)}>Pedidos</Link></li>
                   <li><Link href="/admin/productos/nuevo" onClick={() => setOpenMenu(false)}>Crear producto</Link></li>
                   <li><Link href="/admin/productos/eliminar" onClick={() => setOpenMenu(false)}>Eliminar producto</Link></li>
+                </>
+              )}
+
+              {/* 👇 NUEVO: Cerrar sesión visible sólo si hay sesión */}
+              {logged && (
+                <>
+                  <li className={styles.drawerSep}>Cuenta</li>
+                  <li>
+                    <button
+                      onClick={handleLogoutFromDrawer}
+                      style={{
+                        width: "100%", textAlign: "left", padding: "10px 12px",
+                        borderRadius: 10, border: "1px solid #e5e5e5", background: "#fff",
+                        fontWeight: 600
+                      }}
+                      aria-label="Cerrar sesión"
+                      title="Cerrar sesión"
+                    >
+                      Cerrar sesión
+                    </button>
+                  </li>
                 </>
               )}
             </ul>

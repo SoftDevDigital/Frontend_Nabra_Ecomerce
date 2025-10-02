@@ -16,8 +16,15 @@ async function getJSON(url: string) {
 export default async function Hero() {
   const base = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3001";
 
+  // ✅ ahora respeta rutas del front que empiezan con "/"
   const toAbs = (u?: string | null) =>
-    u && /^https?:\/\//i.test(u) ? u : u ? `${base}/${u}`.replace(/([^:]\/)\/+/g, "$1") : "";
+    u && /^https?:\/\//i.test(u)
+      ? u
+      : u?.startsWith("/")
+      ? u
+      : u
+      ? `${base}/${u}`.replace(/([^:]\/)\/+/g, "$1")
+      : "";
 
   let remoteCoverUrl: string | null = null;
 
@@ -34,13 +41,16 @@ export default async function Hero() {
     if (r?.data?.url) remoteCoverUrl = r.data.url as string;
   }
 
-  // ✅ cache-buster correcto aunque ya tenga ?
-  const abs = remoteCoverUrl ? toAbs(remoteCoverUrl) : null;
-  const chosen = abs ? `${abs}${abs.includes("?") ? "&" : "?"}v=${Date.now()}` : null;
+  // 3) ✅ Fallback definitivo: imagen local en /public
+  const localFallback = "/zapateria.jpeg";
 
-  // Siempre seteamos la var: si no hay portada -> none
+  // ✅ cache-buster correcto aunque ya tenga ?
+  const abs = remoteCoverUrl ? toAbs(remoteCoverUrl) : localFallback;
+  const chosen = `${abs}${abs.includes("?") ? "&" : "?"}v=${Date.now()}`;
+
+  // Siempre seteamos la var
   const styleVar = {
-    ["--hero-bg" as any]: chosen ? `url(${chosen})` : "none",
+    ["--hero-bg" as any]: `url(${chosen})`,
   } as CSSProperties;
 
   return (

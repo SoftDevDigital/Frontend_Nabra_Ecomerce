@@ -94,6 +94,9 @@ export default function MediaUploadPage() {
   const [activeCoverMediaId, setActiveCoverMediaId] = useState<string | null>(null);
   const [activeLoading, setActiveLoading] = useState(false);
   const [activeMsg, setActiveMsg] = useState<string | null>(null);
+
+  // ⬇️⬇️⬇️ NUEVO: estado para desactivar la portada activa sin ID
+  const [deactivatingActive, setDeactivatingActive] = useState(false);
   /* ⬆️⬆️⬆️ FIN nuevos estados */
 
   /* ⬇️⬇️⬇️ AGREGADO: estado admin y efecto para setearlo desde el JWT */
@@ -307,6 +310,43 @@ export default function MediaUploadPage() {
       }
     } finally {
       setDeactivatingId(null);
+    }
+  }
+
+  /* 🔹🔹🔹 NUEVO: Desactivar la portada activa SIN conocer el ID */
+  async function handleDeactivateActiveCover() {
+    setDeactivateMsg(null);
+    setActiveMsg(null);
+    setDeactivatingActive(true);
+    try {
+      if (activeCoverMediaId) {
+        await apiFetch<UploadResponse>(`/media/cover-image/${activeCoverMediaId}/deactivate`, {
+          method: "POST",
+        });
+      } else {
+        await apiFetch<UploadResponse>(`/media/cover-image/active/deactivate`, {
+          method: "POST",
+        });
+      }
+
+      // Limpiar UI
+      setActiveCoverUrl(null);
+      setActiveCoverMediaId(null);
+
+      // Reflejar en tarjetas visibles
+      setResult(prev => (prev && prev.active ? { ...prev, active: false } as MediaDoc : prev));
+      setLookupResult(prev => (prev && prev.active ? { ...prev, active: false } as MediaDoc : prev));
+      setUrlCreated(prev => (prev && prev.active ? { ...prev, active: false } as MediaDoc : prev));
+
+      setDeactivateMsg("Imagen de portada desactivada ✅");
+      setActiveMsg("No hay portada activa.");
+    } catch (err:any) {
+      setDeactivateMsg(err?.message || "No se pudo desactivar la portada activa");
+      if (String(err?.message || "").toLowerCase().includes("no autenticado")) {
+        window.location.href = "/auth?redirectTo=/admin/media";
+      }
+    } finally {
+      setDeactivatingActive(false);
     }
   }
 
@@ -842,6 +882,24 @@ export default function MediaUploadPage() {
           >
             {activeLoading ? "Consultando…" : "Obtener portada activa"}
           </button>
+
+          {/* NUEVO: Desactivar portada activa (sin ID) */}
+          <button
+            type="button"
+            onClick={handleDeactivateActiveCover}
+            disabled={deactivatingActive}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 8,
+              border: "1px solid #ddd",
+              background: deactivatingActive ? "#f3f3f3" : "white",
+              cursor: deactivatingActive ? "default" : "pointer",
+              fontWeight: 600,
+            }}
+          >
+            {deactivatingActive ? "Desactivando…" : "Desactivar portada activa"}
+          </button>
+
           {activeMsg && (
             <span style={{ color: activeMsg.includes("✅") ? "green" : "crimson" }}>{activeMsg}</span>
           )}
@@ -881,6 +939,26 @@ export default function MediaUploadPage() {
               alt="Portada activa"
               style={{ maxWidth: 360, borderRadius: 8, border: "1px solid #eee" }}
             />
+
+            {/* NUEVO: Botón duplicado dentro del panel (opcional UX) */}
+            <div>
+              <button
+                type="button"
+                onClick={handleDeactivateActiveCover}
+                disabled={deactivatingActive}
+                style={{
+                  marginTop: 8,
+                  padding: "8px 12px",
+                  borderRadius: 8,
+                  border: "1px solid #ddd",
+                  background: deactivatingActive ? "#f3f3f3" : "white",
+                  cursor: deactivatingActive ? "default" : "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                {deactivatingActive ? "Desactivando…" : "Desactivar portada activa"}
+              </button>
+            </div>
           </div>
         )}
       </section>
