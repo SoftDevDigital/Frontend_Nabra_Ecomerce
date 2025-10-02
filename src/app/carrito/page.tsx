@@ -982,11 +982,12 @@ async function handlePayWithMercadoPago() {
 
   if (items.length === 0) { setPayMsg("El carrito está vacío"); return; }
 
-  // Validación mínima: necesitamos dirección MX válida para adjuntarla al checkout
+  // Validación mínima: dirección MX válida
   if (!isMxAddressValid) {
     setPayMsg("Completá calle, ciudad, CP y estado de México antes de pagar.");
     return;
   }
+
   // Al menos un dato de contacto
   if (!mxEmail.trim() && !mxPhone.trim()) {
     setPayMsg("Ingresá un email o teléfono de contacto.");
@@ -996,31 +997,20 @@ async function handlePayWithMercadoPago() {
   try {
     setPayingMp(true);
 
-    const origin =
-      typeof window !== "undefined"
-        ? window.location.origin
-        : (process.env.NEXT_PUBLIC_SITE_BASE || "");
-
-    const successUrl = `${origin}/payments/mercadopago/return?source=checkout`;
-    const failureUrl = `${origin}/payments/mercadopago/return?source=checkout`;
-    const pendingUrl = `${origin}/payments/mercadopago/return?source=checkout`;
-
-    // ✅ construir y enviar el shipping en el body
+    // 👉 v2 NO acepta successUrl/failureUrl/pendingUrl. Los arma el backend.
     const simpleShipping = buildSimpleShippingMX();
 
     const pref = await createMercadoPagoCheckoutV2({
-      successUrl,
-      failureUrl,
-      pendingUrl,
-      simpleShipping, // viaja en el body
-    });
+  simpleShipping,        // ✔ datos de envío
+  currencyId: "MXN",     // 👈 NUEVO: evitamos currency_id invalid
+  // couponCode: couponCode?.trim() || undefined, // si aplica
+});
 
     console.debug("MP checkout resp:", pref);
     const redirectUrl = getMpRedirectUrl(pref);
     if (!redirectUrl) throw new Error("No se recibió la URL de pago");
 
-    // Redirigir a Mercado Pago
-    window.location.href = redirectUrl;
+    window.location.href = redirectUrl; // Redirigir a Mercado Pago
   } catch (e: any) {
     const m = String(e?.message || "No se pudo iniciar el pago con Mercado Pago");
     setPayMsg(m);
