@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { calculateShipping, getShippingServices } from "@/lib/shippingApi";
+// import { getShippingServices,getDoctorEnvioRates, fetchDrenvioRatesDirect } from "@/lib/shippingApi";
+import { getShippingServices, fetchDrenvioRatesDirect } from "@/lib/shippingApi";
+
+
 import { useRouter } from "next/navigation";
 import s from "./Cart.module.css";
 import { createMercadoPagoCheckoutV2 } from "@/lib/paymentsApi";
@@ -433,56 +436,8 @@ const isMxAddressValid =
     return apiFetch<{ types: PromotionType[] }>(`/promotions/types`, { method: "GET" });
   }
 
-  async function handleFetchMxShipping(e: React.FormEvent) {
-  e.preventDefault();
-  setMxFormErr(null);
-  setShipOptions(null);
-  setSelectedRate(null);
+ // Dejá SOLO esta versión del handler:
 
-  if (!isMxAddressValid) {
-    setMxFormErr("Completá calle, ciudad, CP y estado de México.");
-    return;
-  }
-
-  setMxFetchingRates(true);
-  try {
-    // 1) Opcional: guardar dirección en el carrito para futuras llamadas
-    if (mxSaveForNext) {
-      try {
-        await apiFetch(`/cart/shipping/address`, {
-          method: "POST",
-          body: JSON.stringify({
-            fullName: `${mxName} ${mxLastname}`.trim(),
-            phone: mxPhone || undefined,
-            addressLine: mxStreet.trim(),
-            city: mxCity.trim(),
-            postalCode: mxZip.trim(),
-            province: mxState,
-            notes: "",
-          }),
-        });
-      } catch { /* no romper el flujo si falla el guardado */ }
-    }
-
-    // 2) Traer servicios de envío para MX
-    const srv = await getShippingServices({
-      country: "MX",
-      state: mxState,
-      city: mxCity.trim(),
-      postalCode: mxZip.trim(),
-      addressLine: mxStreet.trim(),
-    });
-
-    const options = Array.isArray(srv?.options) ? srv.options : [];
-    setShipOptions(options);
-    setSelectedRate(options[0] ?? null);
-    if (options.length === 0) setMxFormErr("No hay métodos de envío disponibles para esa dirección.");
-  } catch (e: any) {
-    setMxFormErr(e?.message || "No se pudieron obtener los métodos de envío");
-  } finally {
-    setMxFetchingRates(false);
-  }
-}
 
   async function handleCalculateShipping(e: React.FormEvent) {
     e.preventDefault();
@@ -1058,6 +1013,46 @@ async function handlePayWithMercadoPago() {
     setPayingMp(false);
   }
 }
+
+
+async function handleFetchMxShipping(e: React.FormEvent) {
+  e.preventDefault();
+  setMxFormErr(null);
+  setShipOptions(null);
+  setSelectedRate(null);
+
+  if (!isMxAddressValid) {
+    setMxFormErr("Completá calle, ciudad, CP y estado de México.");
+    return;
+  }
+
+  setMxFetchingRates(true);
+  try {
+    const { rates } = await fetchDrenvioRatesDirect({
+      originZip: "64000",               // tu CP de origen
+      destZip: mxZip.trim(),            // CP del cliente
+      weightKg: 1,
+    });
+
+    const options = (rates || []).map(r => ({
+      carrier: r.carrier,
+      service: r.service,
+      price: r.price,
+      currency: r.currency || "MXN",
+      days: r.days,
+      serviceId: r.serviceId,
+    })) as any[];
+
+    setShipOptions(options);
+    setSelectedRate(options[0] ?? null);
+    if (options.length === 0) setMxFormErr("No hay métodos de envío disponibles para esa dirección.");
+  } catch (e: any) {
+    setMxFormErr(e?.message || "No se pudieron obtener los métodos de envío");
+  } finally {
+    setMxFetchingRates(false);
+  }
+}
+
 
   async function handleClearCart() {
     setClearMsg(null); setClearing(true);
@@ -2280,83 +2275,7 @@ async function handlePayWithMercadoPago() {
             background: "#fff",
           }}
         >
-         {/* <h2 style={{ fontSize: 18, marginTop: 0, marginBottom: 10 }}>Datos de envío</h2>
-
-          <form onSubmit={handleCreateOrder} style={{ display: "grid", gap: 8 }}>
-            <div className={s.grid2} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              <label style={{ display: "grid", gap: 4 }}>
-                <span style={{ fontSize: 13, opacity: 0.8 }}>Calle</span>
-                <input
-                  className={s.input}
-                  value={shipStreet}
-                  onChange={(e) => setShipStreet(e.target.value)}
-                  required
-                  placeholder="Calle 123"
-                  style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
-                />
-              </label>
-              <label style={{ display: "grid", gap: 4 }}>
-                <span style={{ fontSize: 13, opacity: 0.8 }}>Ciudad</span>
-                <input
-                  className={s.input}
-                  value={shipCity}
-                  onChange={(e) => setShipCity(e.target.value)}
-                  required
-                  placeholder="CDMX"
-                  style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
-                />
-              </label>
-            </div>
-
-            <div className={s.grid2} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              <label style={{ display: "grid", gap: 4 }}>
-                <span style={{ fontSize: 13, opacity: 0.8 }}>Código Postal</span>
-                <input
-                  className={s.input}
-                  value={shipZip}
-                  onChange={(e) => setShipZip(e.target.value)}
-                  required
-                  placeholder="12345"
-                  style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
-                />
-              </label>
-              <label style={{ display: "grid", gap: 4 }}>
-                <span style={{ fontSize: 13, opacity: 0.8 }}>País</span>
-                <input
-                  className={s.input}
-                  value={shipCountry}
-                  onChange={(e) => setShipCountry(e.target.value)}
-                  required
-                  placeholder="México"
-                  style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
-                />
-              </label>
-            </div>
-
-            <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6, flexWrap: "wrap" }}>
-              <button
-                type="submit"
-                disabled={creatingOrder || !cartId}
-                className={s.btnPrimary}
-                style={{
-                  padding: "10px 14px",
-                  borderRadius: 10,
-                  border: "1px solid #ddd",
-                  background: creatingOrder ? "#f3f3f3" : "white",
-                  cursor: creatingOrder ? "default" : "pointer",
-                  fontWeight: 700,
-                }}
-                title="Crear pedido (POST /orders)"
-              >
-                {creatingOrder ? "Creando pedido…" : "Confirmar pedido"}
-              </button>
-
-              {orderMsg && (
-                <span style={{ color: orderMsg.includes("✅") ? "green" : "crimson" }}>{orderMsg}</span>
-              )}
-            </div>
-          </form>
-*/}
+      
           {orderCreated && (
             <div
               style={{
