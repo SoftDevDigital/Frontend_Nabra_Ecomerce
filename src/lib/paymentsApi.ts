@@ -12,6 +12,7 @@ export type MPCheckoutResponse = {
 /**
  * POST /payments/mercadopago/checkout
  * Crea preferencia por TODO el carrito del usuario autenticado.
+ * (V1 con query de redirects. Mantengo por compatibilidad.)
  */
 export async function createMercadoPagoCheckout(opts?: {
   successUrl?: string;
@@ -92,7 +93,7 @@ export async function listPayments(params?: { limit?: number; offset?: number })
 /**
  * GET /payments/:id
  * Devuelve un pago por id.
- * Normaliza respuestas {success,data:{...}} o el objeto directo.
+ * Normaliza respuestas {success,data:{...]} o el objeto directo.
  */
 export async function getPayment(id: string) {
   const res = await apiFetch<any>(`/payments/${id}`, { method: "GET" });
@@ -130,14 +131,28 @@ export type SimpleShipping = {
   };
 };
 
-/** Args para la versión V2 (solo acepta campos válidos por backend) */
+/** 🚚 NUEVO: estructura de Doctor Envío que espera el backend */
+export type DoctorEnvioShippingOption = {
+  ObjectId: string;        // "60"
+  ShippingId: string;      // "N6" (o service_id corto)
+  carrier: string;         // "estafeta"
+  service: string;         // "next_day"
+  currency: string;        // "MXN"
+  price: number;           // 135
+  insurance: number;       // 0 si no hay
+  service_id: string;      // "estafeta_mx_D-C03_next_day"
+  days?: string;           // "1 día"
+};
+
+/** Args para la versión V2 (ahora acepta shippingOption) */
 export type CreateMPCheckoutArgs = {
   simpleShipping?: SimpleShipping;
   couponCode?: string;
+  shippingOption?: DoctorEnvioShippingOption; // 👈 NUEVO
 };
 
 /**
- * V2: POST /payments/mercadopago/checkout (solo con simpleShipping, couponCode, etc.)
+ * V2: POST /payments/mercadopago/checkout (con simpleShipping + shippingOption)
  * No admite successUrl/failureUrl/pendingUrl en el body.
  */
 export async function createMercadoPagoCheckoutV2(
@@ -146,6 +161,7 @@ export async function createMercadoPagoCheckoutV2(
   const body: any = {};
   if (args.simpleShipping) body.simpleShipping = args.simpleShipping;
   if (args.couponCode) body.couponCode = args.couponCode;
+  if (args.shippingOption) body.shippingOption = args.shippingOption; // 👈 NUEVO
 
   const r = await apiFetch<MPCheckoutResponse>(`/payments/mercadopago/checkout`, {
     method: "POST",

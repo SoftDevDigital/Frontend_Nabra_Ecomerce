@@ -12,11 +12,9 @@ type Payload = {
   message: string;
 };
 
-/* ⬇️⬇️⬇️ AGREGADO: helper para base de API del backend */
 function getApiBase() {
   return process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3001";
 }
-/* ⬆️⬆️⬆️ */
 
 export default function ContactoPage() {
   const [name, setName] = useState("");
@@ -30,7 +28,6 @@ export default function ContactoPage() {
     e.preventDefault();
     setResult(null);
 
-    // validaciones mínimas en el cliente
     if (!name.trim() || !email.trim() || !message.trim()) {
       setResult({ ok: false, text: "Completá nombre, email y tu mensaje." });
       return;
@@ -45,12 +42,11 @@ export default function ContactoPage() {
         message: message.trim(),
       };
 
-      /* ⬇️⬇️⬇️ AGREGADO: intento directo al backend /contact con { comment } */
       const backendBody = {
         name: payload.name,
         email: payload.email,
         phone: payload.phone,
-        comment: payload.message, // 👈 el backend espera "comment"
+        comment: payload.message,
       };
 
       let sent = false;
@@ -61,31 +57,22 @@ export default function ContactoPage() {
           body: JSON.stringify(backendBody),
         });
 
-        // intentamos parsear; si no hay JSON igual mostramos OK
         let msgText = "¡Mensaje enviado! Te responderemos a la brevedad.";
         try {
           const data = await resBE.json().catch(() => null);
           if (data && (data.message || data.msg)) {
             msgText = String(data.message || data.msg);
           }
-        } catch {
-          /* noop */
-        }
+        } catch {}
 
-        if (!resBE.ok) {
-          // si el backend responde error, lo mostramos y caemos al fallback
-          throw new Error(msgText || "No se pudo enviar desde el backend.");
-        }
+        if (!resBE.ok) throw new Error(msgText || "No se pudo enviar desde el backend.");
 
         setResult({ ok: true, text: msgText });
         sent = true;
       } catch (err) {
-        // seguimos al fallback local si el BE no está disponible
-        console.info("[Contacto] Backend /contact falló, usando fallback /api/contact. Error:", err);
+        console.info("[Contacto] Backend /contact falló, fallback /api/contact. Error:", err);
       }
-      /* ⬆️⬆️⬆️ FIN agregado backend */
 
-      // Fallback a tu endpoint local (como lo tenías)
       if (!sent) {
         const res = await fetch("/api/contact", {
           method: "POST",
@@ -94,7 +81,6 @@ export default function ContactoPage() {
         }).catch(() => null as any);
 
         if (!res || !("ok" in res) || !res.ok) {
-          // fallback “optimista” para que el flujo no se rompa en local
           console.info("[Contacto] payload:", payload);
           setResult({ ok: true, text: "¡Mensaje enviado! Te responderemos a la brevedad." });
         } else {
@@ -114,19 +100,17 @@ export default function ContactoPage() {
   return (
     <main className={s.page}>
       <div className={s.container}>
-        {/* breadcrumb / volver */}
         <div className={s.topRow}>
           <Link href="/" className={s.backLink}>Volver al inicio</Link>
         </div>
 
-        {/* título + subtítulo */}
         <header className={s.header}>
           <h1 className={s.h1}>Contacto</h1>
           <p className={s.sub}>¿Tenés dudas de talles, envíos o cambios? Escribinos ✨</p>
         </header>
 
         <section className={s.card}>
-          {/* columna izquierda: formulario */}
+          {/* Formulario */}
           <form className={s.form} onSubmit={handleSubmit} noValidate>
             <div className={s.row2}>
               <label className={s.label}>
@@ -159,7 +143,7 @@ export default function ContactoPage() {
                 className={s.input}
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                placeholder="+52 55 1234 5678"
+                placeholder="+52 33 1244 2370"
               />
             </label>
 
@@ -190,7 +174,7 @@ export default function ContactoPage() {
             </div>
           </form>
 
-          {/* columna derecha: info/CTA lateral */}
+          {/* Columna derecha */}
           <aside className={s.aside}>
             <div className={s.asideCard}>
               <h3 className={s.asideTitle}>Atención al cliente</h3>
@@ -205,9 +189,31 @@ export default function ContactoPage() {
             <div className={s.asideCard}>
               <h3 className={s.asideTitle}>También podés</h3>
               <ul className={s.list}>
-                <li><a className={s.link} href="mailto:hola@nabra.mx">hola@nabra.mx</a></li>
-                <li><a className={s.link} href="https://wa.me/5215512345678" target="_blank">WhatsApp</a></li>
-                <li><a className={s.link} href="https://instagram.com/" target="_blank">Instagram</a></li>
+                <li>
+                  <a className={s.link} href="mailto:contact@nabra.mx">
+                    contact@nabra.mx
+                  </a>
+                </li>
+                <li>
+                  <a
+                    className={s.link}
+                    href="https://wa.me/523312442370"
+                    target="_blank"
+                    rel="noopener"
+                  >
+                    WhatsApp: +52 33 1244 2370
+                  </a>
+                </li>
+                <li>
+                  <a
+                    className={s.link}
+                    href="https://www.instagram.com/nabra.mx"
+                    target="_blank"
+                    rel="noopener"
+                  >
+                    Instagram @nabra.mx
+                  </a>
+                </li>
               </ul>
             </div>
           </aside>

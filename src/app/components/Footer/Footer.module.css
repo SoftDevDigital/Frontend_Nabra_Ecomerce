@@ -199,3 +199,14 @@
 @media (max-width: 880px){
   .promoCtas{ justify-items: center; }
 }
+
+
+/* Botón social WhatsApp */
+.whatsapp{
+  background: #25D366;     /* verde WhatsApp */
+  color: #fff;             /* ícono en blanco */
+  border-color: transparent;
+}
+.whatsapp:hover{
+  filter: brightness(.95);
+}

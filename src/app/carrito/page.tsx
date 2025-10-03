@@ -976,41 +976,78 @@ async function handleRemoveItem(itemId: string) {
   };
 }
 
+/** Normaliza distintos shapes de "rate" en la opción esperada por Doctor Envío */
+function buildDoctorEnvioShippingOption(rate: any): import("@/lib/paymentsApi").DoctorEnvioShippingOption {
+  const carrier = String(rate?.carrier ?? "").toLowerCase() || "desconocido";
+  const service = String(rate?.service ?? rate?.name ?? "standard");
+  const currency = String(rate?.currency ?? "MXN");
+  const price = Number(rate?.price ?? rate?.cost ?? 0);
+  const insurance = Number(rate?.insurance ?? 0);
+
+  // Intentar obtener IDs desde varias fuentes comunes
+  const ObjectId =
+    String(rate?.ObjectId ?? rate?.objectId ?? rate?.id ?? "0");
+
+  const ShippingId =
+    String(rate?.ShippingId ?? rate?.serviceId ?? rate?.service_id ?? service);
+
+  const service_id =
+    String(
+      rate?.service_id ??
+      `${carrier}_mx_${ShippingId}_${service}`.replace(/\s+/g, "_").toLowerCase()
+    );
+
+  const days =
+    String(rate?.days ?? (rate?.estimatedDays != null ? `${rate.estimatedDays} día${Number(rate.estimatedDays) === 1 ? "" : "s"}` : ""));
+
+  return {
+    ObjectId,
+    ShippingId,
+    carrier,
+    service,
+    currency,
+    price,
+    insurance,
+    service_id,
+    days,
+  };
+}
+
+/** Sugerencia: no permitir pagar si falta la tarifa */
+function canPayWithMP(): boolean {
+  return (
+    items.length > 0 &&
+    isMxAddressValid &&
+    (!!mxEmail.trim() || !!mxPhone.trim()) &&
+    !!selectedRate
+  );
+}
+
   // 🆕 MP: pagar directo desde /carrito (crea preferencia y redirige)
 async function handlePayWithMercadoPago() {
   setPayMsg(null);
 
   if (items.length === 0) { setPayMsg("El carrito está vacío"); return; }
-
-  // Validación mínima: dirección MX válida
-  if (!isMxAddressValid) {
-    setPayMsg("Completá calle, ciudad, CP y estado de México antes de pagar.");
-    return;
-  }
-
-  // Al menos un dato de contacto
-  if (!mxEmail.trim() && !mxPhone.trim()) {
-    setPayMsg("Ingresá un email o teléfono de contacto.");
-    return;
-  }
+  if (!isMxAddressValid) { setPayMsg("Completá calle, ciudad, CP y estado de México antes de pagar."); return; }
+  if (!mxEmail.trim() && !mxPhone.trim()) { setPayMsg("Ingresá un email o teléfono de contacto."); return; }
+  if (!selectedRate) { setPayMsg("Seleccioná un método de envío antes de pagar."); return; } // 👈 NUEVO
 
   try {
     setPayingMp(true);
 
-    // 👉 v2 NO acepta successUrl/failureUrl/pendingUrl. Los arma el backend.
     const simpleShipping = buildSimpleShippingMX();
+    const shippingOption = buildDoctorEnvioShippingOption(selectedRate); // 👈 NUEVO
 
     const pref = await createMercadoPagoCheckoutV2({
-  simpleShipping,        // ✔ datos de envío
-      // 👈 NUEVO: evitamos currency_id invalid
-  // couponCode: couponCode?.trim() || undefined, // si aplica
-});
+      simpleShipping,
+      shippingOption,                   // 👈 Enviamos datos de Dr. Envío
+      // couponCode: couponCode?.trim() || undefined,
+    });
 
-    console.debug("MP checkout resp:", pref);
     const redirectUrl = getMpRedirectUrl(pref);
     if (!redirectUrl) throw new Error("No se recibió la URL de pago");
 
-    window.location.href = redirectUrl; // Redirigir a Mercado Pago
+    window.location.href = redirectUrl;
   } catch (e: any) {
     const m = String(e?.message || "No se pudo iniciar el pago con Mercado Pago");
     setPayMsg(m);

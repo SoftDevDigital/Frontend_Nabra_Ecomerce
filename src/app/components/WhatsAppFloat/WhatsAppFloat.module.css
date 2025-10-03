@@ -1,0 +1,24 @@
+.fab{
+  position: fixed;
+  z-index: 9999;
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  background: #25D366; /* color WhatsApp */
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 30px rgba(0,0,0,.25);
+  transition: transform .15s ease, box-shadow .15s ease, opacity .2s ease;
+  opacity: 0.98;
+}
+
+.fab:hover{
+  transform: translateY(-2px);
+  box-shadow: 0 14px 36px rgba(0,0,0,.28);
+}
+
+@media (max-width: 480px){
+  .fab{ width: 52px; height: 52px; }
+}

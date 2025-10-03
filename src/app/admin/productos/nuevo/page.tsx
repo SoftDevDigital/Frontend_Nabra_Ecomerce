@@ -16,7 +16,7 @@ type ProductIn = {
   stock: number;
   isPreorder?: boolean;
   isFeatured?: boolean;
-  isActive?: boolean;
+  // 👉 isActive *no* se envía porque el backend no lo admite
 };
 
 type ProductOut = {
@@ -85,7 +85,7 @@ export default function AdminCreateProductPage() {
   const [stock, setStock] = useState<number | "">("");
   const [isPreorder, setIsPreorder] = useState(false);
   const [isFeatured, setIsFeatured] = useState(false);
-  const [isActive, setIsActive] = useState<boolean>(true);
+  const [isActive, setIsActive] = useState<boolean>(true); // UI solamente
 
   // UI
   const [creating, setCreating] = useState(false);
@@ -122,7 +122,7 @@ export default function AdminCreateProductPage() {
     setStock(typeof p.stock === "number" ? p.stock : "");
     setIsPreorder(Boolean(p.isPreorder));
     setIsFeatured(Boolean(p.isFeatured));
-    setIsActive(typeof p.isActive === "boolean" ? p.isActive : true);
+    setIsActive(typeof p.isActive === "boolean" ? p.isActive : true); // UI
   }
 
   async function loadAllProducts() {
@@ -166,6 +166,8 @@ export default function AdminCreateProductPage() {
     if (!sizes.length) { setMsg("Ingresá al menos un talle en “sizes”."); return; }
 
     const images = parseCsvToArray(imagesText);
+
+    // ❗ No enviar isActive: el backend lo rechaza
     const body: ProductIn = {
       name: name.trim(),
       description: description.trim(),
@@ -176,7 +178,7 @@ export default function AdminCreateProductPage() {
       ...(images.length ? { images } : {}),
       ...(isPreorder ? { isPreorder: true } : {}),
       ...(isFeatured ? { isFeatured: true } : {}),
-      ...(typeof isActive === "boolean" ? { isActive } : {}),
+      // isActive se omite a propósito
     };
 
     setCreating(true);
@@ -199,6 +201,7 @@ export default function AdminCreateProductPage() {
       // reset
       setName(""); setDescription(""); setPrice(""); setCategory("");
       setSizesText(""); setImagesText(""); setStock("");
+      setIsPreorder(false); setIsFeatured(false); setIsActive(true);
       setEditing(false); setEditId("");
 
       void loadAllProducts();
@@ -255,6 +258,7 @@ export default function AdminCreateProductPage() {
     const sizes = parseCsvToArray(sizesText);
     const images = parseCsvToArray(imagesText);
 
+    // ❗ Tampoco mandamos isActive en updates
     const bodyFull: Partial<ProductIn> = {
       price: p,
       stock: s,
@@ -265,6 +269,7 @@ export default function AdminCreateProductPage() {
       ...(images.length ? { images } : { images: [] }),
       isPreorder,
       isFeatured,
+      // isActive se omite
     };
 
     setUpdating(true);
@@ -467,7 +472,7 @@ export default function AdminCreateProductPage() {
             <div className={s.switchRow}>
               <label className={s.switch}><input type="checkbox" checked={isPreorder} onChange={(e) => setIsPreorder(e.target.checked)}/><span>isPreorder</span></label>
               <label className={s.switch}><input type="checkbox" checked={isFeatured} onChange={(e) => setIsFeatured(e.target.checked)}/><span>isFeatured</span></label>
-              <label className={s.switch}><input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)}/><span>isActive</span></label>
+              <label className={s.switch}><input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)}/><span>isActive (UI)</span></label>
 
               {!editing ? (
                 <button type="submit" disabled={creating} className={s.btnSubmit} title="Crear producto">
