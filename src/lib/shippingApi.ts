@@ -154,23 +154,30 @@ export async function fetchDrenvioRatesDirect(input: {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${process.env.NEXT_PUBLIC_DRENVIO_TOKEN}`, // ⚠️ o directo el token hardcodeado
+      "Authorization": `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiYXV0aDB8NjMzZjk3NWM1MDMzYmZhY2E5YjZhNzJkIiwidmlwIjpmYWxzZSwibmFtZSI6ImJlcmVuaWNlIG5hcmNpem8iLCJlbWFpbCI6Im5hYnJhd29tYW5zbXhAZ21haWwuY29tIiwiaWF0IjoxNjY1MTgyNzAxfQ.ymW0N_E3SVUhPYizbOExZiiL_D2Z0zSKMaMcLtzE8GU`, // ⚠️ o directo el token hardcodeado
     },
     body: JSON.stringify(body),
   });
 
   const data = await res.json();
-  if (!res.ok) throw new Error(data?.message || "Error al cotizar en Drenvio");
+if (!res.ok) throw new Error(data?.message || "Error al cotizar en Drenvio");
 
-  // Normalizá al shape que tu UI espera
-  const rates = (data?.rates || data?.data || []).map((r: any) => ({
-    carrier: r.carrier,
-    service: r.service,
-    price: r.price,
-    currency: r.currency || "MXN",
-    days: r.days || r.estimated_days,
-    serviceId: r.serviceId || r.id,
-  }));
+// ✅ soportar también array en raíz
+const rawRates = Array.isArray(data) ? data : (data?.rates || data?.data || []);
 
-  return { rates };
+// Normalizá al shape que tu UI espera
+const rates = rawRates.map((r: any) => ({
+  carrier: r.carrier,
+  service: r.service,
+  price: r.price,
+  currency: r.currency || "MXN",
+  days: r.days || r.estimated_days,
+
+  // ids robustos
+  serviceId: r.serviceId ?? r.service_id ?? r.id ?? "",
+  ObjectId: r.ObjectId ?? r.objectId ?? "",
+  ShippingId: r.ShippingId ?? r.shippingId ?? "",
+}));
+
+return { rates };
 }

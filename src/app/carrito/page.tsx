@@ -1028,24 +1028,39 @@ async function handleFetchMxShipping(e: React.FormEvent) {
 
   setMxFetchingRates(true);
   try {
-    const { rates } = await fetchDrenvioRatesDirect({
-      originZip: "64000",               // tu CP de origen
-      destZip: mxZip.trim(),            // CP del cliente
+    // Puede venir como array directo o como { rates: [...] }
+    const res = await fetchDrenvioRatesDirect({
+      originZip: "64000",           // tu CP de origen (NL)
+      destZip: mxZip.trim(),        // CP del cliente
       weightKg: 1,
     });
 
-    const options = (rates || []).map(r => ({
-      carrier: r.carrier,
-      service: r.service,
-      price: r.price,
-      currency: r.currency || "MXN",
-      days: r.days,
-      serviceId: r.serviceId,
-    })) as any[];
+    const rawRates: any[] = Array.isArray(res) ? res : (res?.rates ?? []);
 
-    setShipOptions(options);
+    // Si no hay nada, avisamos
+    if (!Array.isArray(rawRates) || rawRates.length === 0) {
+      setShipOptions([]);
+      setMxFormErr("No hay métodos de envío disponibles para esa dirección.");
+      return;
+    }
+
+    // Normalizamos los campos que usa el front
+    const options = rawRates.map((r: any) => ({
+      carrier: r.carrier,                            // "fedex" | "estafeta" | "dhl" | "ampm"
+      service: r.service,                            // "ground" | "express" | ...
+      price: Number(r.price ?? r.cost ?? 0),
+      currency: r.currency || "MXN",
+      days: r.days,                                  // "3 a 5 días", etc.
+      serviceId: r.serviceId ?? r.service_id ?? "",  // 👈 clave: normalizamos service_id → serviceId
+      ObjectId: r.ObjectId ?? r.objectId ?? r.id ?? ""
+    }));
+
+    setShipOptions(options as any[]);
     setSelectedRate(options[0] ?? null);
-    if (options.length === 0) setMxFormErr("No hay métodos de envío disponibles para esa dirección.");
+
+    if (options.length === 0) {
+      setMxFormErr("No hay métodos de envío disponibles para esa dirección.");
+    }
   } catch (e: any) {
     setMxFormErr(e?.message || "No se pudieron obtener los métodos de envío");
   } finally {
