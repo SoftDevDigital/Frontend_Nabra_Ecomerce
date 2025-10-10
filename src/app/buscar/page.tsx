@@ -1,7 +1,7 @@
 // src/app/buscar/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react"; // 👈 agregamos Suspense
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
@@ -19,7 +19,8 @@ type SearchResponse =
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3000";
 
-export default function SearchProductsPage() {
+// 👇 Mover tu lógica a un componente interno
+function SearchProductsPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -161,5 +162,14 @@ export default function SearchProductsPage() {
         </section>
       )}
     </main>
+  );
+}
+
+// 👇 Este wrapper evita el error de build
+export default function SearchProductsPage() {
+  return (
+    <Suspense fallback={<p>Cargando búsqueda...</p>}>
+      <SearchProductsPageInner />
+    </Suspense>
   );
 }
