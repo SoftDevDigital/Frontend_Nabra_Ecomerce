@@ -1,0 +1,146 @@
+/* === Vars extra (colores de marca + UI) === */
+:root{
+  --brand: #111;          /* color principal (cámbialo si querés) */
+  --brand-contrast: #fff;
+  --muted: #666;
+  --border: #eeeeee;
+  --radius: 999px;
+
+  /* Tipografía fluida base */
+  --fs-sm: clamp(12px, 0.85rem, 14px);
+  --fs-md: clamp(14px, 1rem, 16px);
+  --fs-lg: clamp(18px, 2.2vw, 22px);
+  --fs-xl: clamp(26px, 4.2vw, 56px);
+
+  /* Safe areas (iPhone con notch) */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media (prefers-color-scheme: dark){
+  :root{
+    --border: #2a2a2a;
+    --muted: #b3b3b3;
+  }
+}
+
+/* === Resets/ajustes mínimos globales === */
+img, picture, video, canvas, svg{ display:block; max-width:100%; height:auto; }
+input, button, textarea, select{ font: inherit; color: inherit; }
+
+/* Enlaces: subrayado al hover para mejor UX */
+a:hover{ text-decoration: underline; }
+
+/* Anillos de foco accesibles (teclado) */
+:focus-visible{
+  outline: 2px solid #4c9ffe;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Botón base (opcional, usado en CTA del hero) */
+
+button:hover, .btn:hover{ background:#f7f7f7; }
+@media (prefers-color-scheme: dark){
+  button, .btn{ background:#111; color:#fff; border-color:#2a2a2a; }
+  button:hover, .btn:hover{ background:#1a1a1a; }
+}
+
+/* Tipos y títulos fluidos */
+h1{ font-size: var(--fs-xl); line-height:1.05; letter-spacing:.4px; }
+h2{ font-size: var(--fs-lg); line-height:1.15; }
+p, li{ font-size: var(--fs-md); color: var(--foreground); }
+small{ font-size: var(--fs-sm); color: var(--muted); }
+
+/* Utilidad de contenedor (útil en header/sections) */
+.container{
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+/* Texto solo para lectores de pantalla */
+.sr-only{
+  position:absolute!important; width:1px; height:1px; padding:0; margin:-1px;
+  overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
+}
+
+/* Sombras suaves para cards/botones */
+.shadow-soft{ box-shadow: 0 6px 20px rgba(0,0,0,.08); }
+
+/* Soporte “reduced motion”: desactiva animaciones fuertes */
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{ animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+
+/* Pequeños breakpoints afinados para iPhone */
+@media (max-width: 390px){ /* iPhone 12/14 vertical */
+  .container{ padding: 0 12px; }
+}
+@media (max-width: 360px){ /* iPhone SE */
+  body{ font-size: 15px; }
+}
+
+/* === Variables de marca (según manual NABRA) === */
+:root {
+  /* Cromática principal */
+  --nabra-cream: #f7f2e9;   /* Pantone 663 C */
+  --nabra-blue:  #b4cfd8;   /* Pantone 552 C */
+  --nabra-gray:  #9ea09a;   /* Pantone 422 C aprox */
+  --nabra-gray-2:#c4cfcf;   /* Pantone 5455 C */
+  --nabra-tan:   #d5c4aa;   /* Pantone 4247 C */
+
+  --text: #222;
+  --muted: #6b7280;
+  --border: rgba(0,0,0,.08);
+
+  /* Tipografía fluida base (opcional) */
+  --fs-sm: clamp(12px, 0.85rem, 14px);
+  --fs-md: clamp(14px, 1rem, 16px);
+  --fs-lg: clamp(18px, 2.2vw, 22px);
+  --fs-xl: clamp(26px, 4.2vw, 56px);
+
+  /* Safe areas (iPhone con notch) */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media (prefers-color-scheme: dark){
+  :root{
+    --border: #2a2a2a;
+    --muted: #b3b3b3;
+  }
+}
+
+/* === Resets/ajustes globales livianos === */
+img, picture, video, canvas, svg{ display:block; max-width:100%; height:auto; }
+input, button, textarea, select{ font: inherit; color: inherit; }
+a:hover{ text-decoration: underline; }
+
+/* Anillos de foco accesibles (teclado) */
+:focus-visible{
+  outline: 2px solid #4c9ffe;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Sombras suaves utilitarias */
+.shadow-soft{ box-shadow: 0 6px 20px rgba(0,0,0,.08); }
+
+/* “Reduced motion” */
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Pequeños breakpoints afinados para iPhone */
+@media (max-width: 390px){ /* iPhone 12/14 vertical */
+  body{ font-size: 15px; }
+}
+@media (max-width: 360px){ /* iPhone SE */
+  body{ font-size: 15px; }
+}

@@ -1,0 +1,105 @@
+/* ===== Layout base ===== */
+.page{
+  max-width:1024px;
+  margin:24px auto 48px;
+  padding:0 16px;
+}
+.header{
+  display:flex; align-items:center; gap:12px; margin-bottom:14px;
+}
+.title{
+  margin:0; font-weight:800;
+  font-size:clamp(20px,3.6vw,28px);
+}
+.back{
+  margin-left:auto; color:#4b5563; text-decoration:none; font-weight:600;
+}
+.back:hover{ text-decoration:underline; }
+
+/* Avisos y textos */
+.notice{ border:1px solid #eee; border-radius:12px; padding:14px; background:#fff; }
+.m0{ margin:0; }
+.muted{ color:#6b7280; }
+.ok{ color:#0b7a34; }
+.error{ color:crimson; }
+
+/* ===== Toolbar ===== */
+.toolbar{
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  border:1px solid rgba(0,0,0,.08); background:#fff;
+  border-radius:14px; padding:10px; margin-bottom:12px;
+}
+.btn{
+  padding:8px 12px; border-radius:10px; border:1px solid #ddd; background:#fff;
+  font-weight:700; cursor:pointer; transition:background .15s ease, transform .08s ease;
+}
+.btn:hover{ background:#f7f7f7; transform:translateY(-1px); }
+.btn:disabled{ opacity:.55; cursor:default; transform:none; }
+.counter{ color:#111; font-weight:600; }
+
+/* ===== Listado ===== */
+.list{ display:grid; gap:12px; }
+
+/* Card pedido */
+.card{
+  display:grid; gap:10px; padding:12px; background:#fff;
+  border:1px solid #eee; border-radius:14px;
+  transition:box-shadow .15s ease, transform .08s ease;
+}
+.card:hover{ transform:translateY(-2px); box-shadow:0 12px 28px rgba(0,0,0,.06); }
+
+.meta{ display:grid; gap:4px; }
+.metaLine{ opacity:.9; font-size:13px; color:#444; }
+
+.itemsCompact{ display:grid; gap:6px; }
+.itemRow{ display:flex; gap:10px; align-items:baseline; font-size:14px; flex-wrap:wrap; }
+.itemName{ font-weight:600; }
+
+.itemsTotals{ display:grid; gap:4px; font-size:13px; color:#555; }
+
+/* Acciones */
+.actions{ display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+.link{ color:#0f172a; text-decoration:underline; font-weight:600; }
+.link:hover{ opacity:.85; }
+.statusWrap{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.lbl{ font-size:13px; opacity:.85; }
+.select{ padding:6px 8px; border-radius:8px; border:1px solid #ddd; background:#fff; }
+
+/* Tracking */
+.tracking{
+  margin-top:4px; padding-top:8px; border-top:1px dashed #eee;
+  display:grid; gap:8px;
+}
+.trkControls{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.input{ padding:6px 8px; border-radius:8px; border:1px solid #ddd; min-width:220px; }
+
+.trkPanel{
+  border:1px solid #eef2ff; background:#f8faff; border-radius:10px; padding:10px;
+  display:grid; gap:6px;
+}
+.trkHead{ font-weight:700; }
+.trkHistTitle{ font-weight:600; margin-bottom:4px; }
+.trkList{ margin:0; padding-left:18px; }
+.trkItem{ margin-bottom:2px; }
+.trkTs{ opacity:.8; }
+
+/* ===== Responsive breakpoints ===== */
+/* iPhone SE (≤360px) */
+@media (max-width:360px){
+  .page{ padding:0 12px; }
+  .btn{ padding:7px 10px; }
+  .input{ min-width:0; width:100%; }
+}
+
+/* iPhone 12/14 (≤430px) */
+@media (max-width:430px){
+  .title{ font-size:24px; }
+  .toolbar{ gap:8px; }
+}
+
+/* Tablet+ */
+@media (min-width:768px){
+  .list{ grid-template-columns: 1fr; }
+}
+
+/* Desktop ancho: el card ya abre cómodo; no forzamos columnas para priorizar lectura */

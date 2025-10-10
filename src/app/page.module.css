@@ -1,0 +1,32 @@
+/* src/app/page.module.css */
+.marquee{
+  border-top: 1px solid #eee;
+  border-bottom: 1px solid #eee;
+  overflow: hidden;
+  background: #fff;
+}
+.track{
+  display: inline-block;
+  white-space: nowrap;
+  padding: 10px 0;
+  animation: slide 22s linear infinite;
+  font-weight: 600;
+  letter-spacing: .4px;
+}
+@keyframes slide{
+  from{ transform: translateX(0); }
+  to{ transform: translateX(-50%); }
+}
+
+.section{
+  max-width: 1200px;
+  margin: 28px auto 60px;
+  padding: 0 16px;
+  text-align: center;
+}
+.h2{
+  font-size: clamp(20px, 3.5vw, 28px);
+  letter-spacing: .6px;
+  margin: 12px 0 8px;
+}
+.p{ color:#666; }
