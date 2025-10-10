@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useMemo } from "react";
+import { useMemo, Suspense } from "react";
 
 function statusLabel(s?: string) {
   const x = (s || "").toLowerCase();
@@ -13,7 +13,7 @@ function statusLabel(s?: string) {
   return "Estado de pago desconocido";
 }
 
-export default function MpReturnPage() {
+function MpReturnPageInner() {
   const sp = useSearchParams();
 
   const info = useMemo(() => {
@@ -21,7 +21,7 @@ export default function MpReturnPage() {
     const status = sp.get("status") || "";
     const merchant_order_id = sp.get("merchant_order_id") || "";
     const external_reference = sp.get("external_reference") || "";
-    const source = sp.get("source") || ""; // "checkout" | "partial" (opcional, solo para feedback)
+    const source = sp.get("source") || ""; // "checkout" | "partial"
     return { payment_id, status, merchant_order_id, external_reference, source };
   }, [sp]);
 
@@ -53,5 +53,13 @@ export default function MpReturnPage() {
         Si el estado es <strong>pendiente</strong>, Mercado Pago puede tardar unos minutos en confirmarlo.
       </p>
     </main>
+  );
+}
+
+export default function MpReturnPage() {
+  return (
+    <Suspense fallback={<main style={{ padding: 24 }}>Cargando información de pago...</main>}>
+      <MpReturnPageInner />
+    </Suspense>
   );
 }

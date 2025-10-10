@@ -1,7 +1,7 @@
 // src/app/admin/pagos/page.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, Suspense } from "react"; // 👈 agregado Suspense
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { listPayments, type Payment, cancelPayment, CANCELLABLE_STATUSES, getPayment } from "@/lib/paymentsApi";
@@ -11,7 +11,8 @@ function money(n: number, ccy = "ARS") {
   catch { return `${ccy} ${n}`; }
 }
 
-export default function AdminPaymentsPage() {
+// 👇 Componente interno que usa useSearchParams()
+function AdminPaymentsPageInner() {
   const sp = useSearchParams();
   const focus = sp.get("focus") || "";
   const [loading, setLoading] = useState(true);
@@ -165,5 +166,14 @@ export default function AdminPaymentsPage() {
         </div>
       )}
     </main>
+  );
+}
+
+// 👇 Envolvemos el componente en Suspense para evitar el error de build
+export default function AdminPaymentsPage() {
+  return (
+    <Suspense fallback={<p>Cargando pagos...</p>}>
+      <AdminPaymentsPageInner />
+    </Suspense>
   );
 }
