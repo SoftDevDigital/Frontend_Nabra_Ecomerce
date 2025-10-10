@@ -27,7 +27,7 @@ type Product = {
   [k: string]: any;
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3001";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://https://api.nabra.mx";
 
 function currency(n?: number) {
   if (typeof n !== "number") return "";

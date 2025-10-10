@@ -4,7 +4,7 @@
 import { apiFetch } from "@/lib/api";
 
 function getApiBase() {
-  return process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3001";
+  return process.env.NEXT_PUBLIC_API_BASE ?? "http://https://api.nabra.mx";
 }
 
 /* ✅ NUEVO: intento obtener un token desde el servidor (cookie-only) */
