@@ -33,7 +33,7 @@ export default function PreordersPage() {
     setLoading(true);
     setErr(null);
     try {
-      const res = await fetch(`${API_BASE}/products`, { cache: "no-store" });
+      const res = await fetch(`${API_BASE}/products/preorders`, { cache: "no-store" });
       const text = await res.text();
       const json = text ? JSON.parse(text) : null;
 
