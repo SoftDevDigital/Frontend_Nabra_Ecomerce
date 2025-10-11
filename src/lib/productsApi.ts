@@ -1,5 +1,5 @@
 // src/lib/productsApi.ts
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://https://api.nabra.mx";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "https://api.nabra.mx";
 
 export type ProductsQuery = {
   page?: number;

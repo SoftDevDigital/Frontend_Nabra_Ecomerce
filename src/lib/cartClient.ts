@@ -1,5 +1,5 @@
 // src/lib/cartClient.ts
-import { apiFetch } from "./apiFetch";
+import { apiFetch } from "./api";
 
 export type AddToCartResponse = {
   message: string;

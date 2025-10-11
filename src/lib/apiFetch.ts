@@ -1,6 +1,6 @@
 // src/lib/apiFetch.ts
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://https://api.nabra.mx";
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "https://api.nabra.mx";
   const token = typeof window !== "undefined" ? localStorage.getItem("nabra_token") : null;
 
   const headers = new Headers(init.headers || {});
@@ -9,7 +9,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   if (token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
   if (!headers.has("Accept")) headers.set("Accept", "application/json");
 
-  const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  const res = await fetch(`${API_BASE}${path}`, { ...init, headers, credentials: "include" });
   if (res.status === 204) return undefined as unknown as T;
 
   const text = await res.text();

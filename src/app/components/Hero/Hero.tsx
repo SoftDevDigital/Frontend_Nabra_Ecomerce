@@ -14,7 +14,7 @@ async function getJSON(url: string) {
 }
 
 export default async function Hero() {
-  const base = process.env.NEXT_PUBLIC_API_BASE ?? "http://https://api.nabra.mx";
+  const base = process.env.NEXT_PUBLIC_API_BASE ?? "https://api.nabra.mx";
 
   // ✅ ahora respeta rutas del front que empiezan con "/"
   const toAbs = (u?: string | null) =>
