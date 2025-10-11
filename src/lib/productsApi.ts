@@ -54,6 +54,51 @@ export function buildProductsUrl(q: ProductsQuery = {}) {
   return `${API_BASE}/products${qs ? `?${qs}` : ""}`;
 }
 
+/* ===== Helpers de normalización (NUEVOS) ===== */
+function normalizeProducts(payload: any): ProductDto[] {
+  // Arrays en distintas envolturas
+  if (Array.isArray(payload)) return payload as ProductDto[];
+  if (Array.isArray(payload?.products)) return payload.products as ProductDto[];
+  if (Array.isArray(payload?.docs)) return payload.docs as ProductDto[];
+  if (Array.isArray(payload?.data?.products)) return payload.data.products as ProductDto[];
+  if (Array.isArray(payload?.data?.docs)) return payload.data.docs as ProductDto[];
+  if (Array.isArray(payload?.data)) return payload.data as ProductDto[];
+
+  // Único producto como objeto
+  const maybeOne = payload?.data ?? payload;
+  if (maybeOne && typeof maybeOne === "object" && maybeOne._id) {
+    return [maybeOne as ProductDto];
+  }
+  return [];
+}
+
+function normalizeTotals(payload: any, listLen: number) {
+  const page =
+    Number(payload?.page) ??
+    Number(payload?.data?.page) ??
+    1;
+
+  const total =
+    Number(payload?.total) ??
+    Number(payload?.data?.total) ??
+    Number(payload?.pagination?.total) ??
+    listLen;
+
+  const limit =
+    Number(payload?.limit) ??
+    Number(payload?.data?.limit) ??
+    (listLen > 0 ? listLen : 12);
+
+  const totalPages =
+    Number(payload?.totalPages) ??
+    Number(payload?.data?.totalPages) ??
+    Number(payload?.pagination?.totalPages) ??
+    Math.max(1, Math.ceil(total / Math.max(1, limit)));
+
+  return { page, total, totalPages };
+}
+
+/* ===== fetchProducts endurecido (REEMPLAZO) ===== */
 export async function fetchProducts(q: ProductsQuery = {}, init?: RequestInit): Promise<ProductsResponse> {
   const url = buildProductsUrl(q);
   const res = await fetch(url, { cache: "no-store", ...init });
@@ -64,20 +109,17 @@ export async function fetchProducts(q: ProductsQuery = {}, init?: RequestInit): 
     throw new Error(json?.message || "No se pudieron obtener los productos");
   }
 
-  // soporta backend que devuelva plano o { success, data }
-  if (json?.products && typeof json?.total === "number") return json;
-  if (json?.data?.products) return json.data as ProductsResponse;
+  // Acepta payload plano o { success, data }
+  const payload = json?.data ?? json;
 
-  // fallback ingenuo
-  return {
-    products: Array.isArray(json) ? json : json?.products ?? [],
-    total: json?.total ?? (Array.isArray(json) ? json.length : 0),
-    page: json?.page ?? 1,
-    totalPages: json?.totalPages ?? 1,
-  };
+  // Soporta listas y también un único producto en data
+  const products = normalizeProducts(payload);
+  const { page, total, totalPages } = normalizeTotals(payload, products.length);
+
+  return { products, total, page, totalPages };
 }
 
-// --- Categories ----
+/* --- Categories ---- */
 export type CategoryCount = { category: string; count: number };
 
 export async function fetchProductCategories(init?: RequestInit): Promise<CategoryCount[]> {
@@ -93,7 +135,7 @@ export async function fetchProductCategories(init?: RequestInit): Promise<Catego
   return [];
 }
 
-// --- (Opcional) Detalle por ID: /products/:id ----
+/* --- Detalle por ID: /products/:id ---- */
 export async function fetchProductById(id: string, init?: RequestInit): Promise<ProductDto> {
   if (!id) throw new Error("Falta el id de producto");
   const res = await fetch(`${API_BASE}/products/${id}`, { cache: "no-store", ...init });
@@ -106,7 +148,7 @@ export async function fetchProductById(id: string, init?: RequestInit): Promise<
   return (json?.data ?? json) as ProductDto;
 }
 
-// --- ✨ NUEVO: Stats por categoría /products/categories/:category/stats ----
+/* --- Stats por categoría /products/categories/:category/stats ---- */
 export type CategoryStats = {
   category: string;
   totalProducts: number;
