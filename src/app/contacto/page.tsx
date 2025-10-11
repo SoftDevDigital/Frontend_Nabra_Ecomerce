@@ -13,7 +13,7 @@ type Payload = {
 };
 
 function getApiBase() {
-  return process.env.NEXT_PUBLIC_API_BASE ?? "https://api.nabra.mx";
+  return process.env.NEXT_PUBLIC_API_BASE ?? "http://https://api.nabra.mx";
 }
 
 export default function ContactoPage() {
