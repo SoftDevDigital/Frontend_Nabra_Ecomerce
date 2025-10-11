@@ -24,7 +24,7 @@ type SearchResponse =
   | Product[];
 
 /* ✅ usa el puerto del backend */
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://https://api.nabra.mx";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3001";
 const CURRENCY = process.env.NEXT_PUBLIC_CURRENCY || "MXN";
 const LOCALE = process.env.NEXT_PUBLIC_LOCALE || "es-MX";
 /* ✅ cuántos productos cargar al abrir el modal */

@@ -207,7 +207,7 @@ type WithShippingResponse = WithShippingWrapped | WithShippingData;
 
 /* ===== Helper fetch (con Bearer) ===== */
 async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://https://api.nabra.mx";
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3001";
   const token = typeof window !== "undefined" ? localStorage.getItem("nabra_token") : null;
   const headers = new Headers(init.headers || {});
   const isFormData = typeof FormData !== "undefined" && (init as any).body instanceof FormData;

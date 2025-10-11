@@ -72,7 +72,7 @@ function isAdminFromToken(): boolean {
 
 /* ========= Utils UI ========= */
 // ✅ CAMBIO: base por defecto al puerto 3001 (tu API)
-const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://https://api.nabra.mx";
+const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3001";
 
 // ✅ NUEVO: heurística simple para filtrar URLs que no son imagen
 function isLikelyImageUrl(u?: string) {

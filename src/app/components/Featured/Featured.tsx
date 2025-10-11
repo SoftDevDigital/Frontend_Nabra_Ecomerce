@@ -56,7 +56,7 @@ function isLikelyImageUrl(u: string) {
 /* 👇 NUEVO: helpers para sincronizar el badge del carrito */
 async function fetchCartTotalCount(): Promise<number | null> {
   try {
-    const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://https://api.nabra.mx";
+    const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3001";
     const token = typeof window !== "undefined" ? localStorage.getItem("nabra_token") : null;
     const res = await fetch(`${API_BASE}/cart/total`, {
       method: "GET",
