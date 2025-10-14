@@ -255,3 +255,18 @@
   font-weight: 800;
   background: #fff;
 }
+
+.chip:not(.chipActive):hover{
+  background:#f7f7f7;
+  transform: translateY(-1px);
+}
+
+/* Si el chip está activo, conserva el estilo oscuro también en hover/focus */
+.chipActive:hover,
+.chipActive:focus-visible{
+  background:#111;
+  color:#fff;
+  border-color:#111;
+  transform: translateY(-1px);
+  outline: none; /* opcional: evitamos outline azul si molesta */
+}
