@@ -22,7 +22,7 @@ type UploadResponse = {
 
 /* ⬇️⬇️⬇️ AGREGADO: helpers para API base y Authorization */
 function getApiBase() {
-  return process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3001";
+  return process.env.NEXT_PUBLIC_API_BASE
 }
 function getAuthHeader() {
   try {
