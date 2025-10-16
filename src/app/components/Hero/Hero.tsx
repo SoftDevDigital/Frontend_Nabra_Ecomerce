@@ -1,10 +1,14 @@
 import type { CSSProperties } from "react";
 import styles from "./Hero.module.css";
 import Link from "next/link";
+import OptimizedImage from "../UI/OptimizedImage";
 
 async function getJSON(url: string) {
   try {
-    const res = await fetch(url, { cache: "no-store", next: { revalidate: 0 } });
+    const res = await fetch(url, { 
+      cache: "force-cache",
+      next: { revalidate: 300 } // 5 minutos
+    });
     const json = await res.json().catch(() => ({}));
     if (!res.ok || json?.success === false) return null;
     return json;
@@ -14,44 +18,28 @@ async function getJSON(url: string) {
 }
 
 export default async function Hero() {
+  // 🚀 OPTIMIZACIÓN: Usar imagen local por defecto para carga inmediata
+  const localFallback = "/zapateria.jpeg";
+  
+  // Siempre usar la imagen local primero para carga inmediata
+  const styleVar = {
+    ["--hero-bg" as any]: `url(${localFallback})`,
+  } as CSSProperties;
+
+  // Intentar cargar imagen remota en background (opcional)
+  let remoteCoverUrl: string | null = null;
   const base = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3001";
 
-  // ✅ ahora respeta rutas del front que empiezan con "/"
-  const toAbs = (u?: string | null) =>
-    u && /^https?:\/\//i.test(u)
-      ? u
-      : u?.startsWith("/")
-      ? u
-      : u
-      ? `${base}/${u}`.replace(/([^:]\/)\/+/g, "$1")
-      : "";
-
-  let remoteCoverUrl: string | null = null;
-
-  // 1) Portada activa (id + url)
-  const resp = await getJSON(`${base}/media/cover-image/active/url`);
-  if (resp) {
-    const data = (resp as any).data ?? resp;
-    remoteCoverUrl = typeof data === "string" ? data : data?.url ?? null;
+  try {
+    // Solo intentar fetch si la API está disponible
+    const resp = await getJSON(`${base}/media/cover-image/active/url`);
+    if (resp) {
+      const data = (resp as any).data ?? resp;
+      remoteCoverUrl = typeof data === "string" ? data : data?.url ?? null;
+    }
+  } catch {
+    // Si falla, usar imagen local (ya está configurada)
   }
-
-  // 2) Fallback suave
-  if (!remoteCoverUrl) {
-    const r = await getJSON(`${base}/media/cover-image/active`);
-    if (r?.data?.url) remoteCoverUrl = r.data.url as string;
-  }
-
-  // 3) ✅ Fallback definitivo: imagen local en /public
-  const localFallback = "/zapateria.jpeg";
-
-  // ✅ cache-buster correcto aunque ya tenga ?
-  const abs = remoteCoverUrl ? toAbs(remoteCoverUrl) : localFallback;
-  const chosen = `${abs}${abs.includes("?") ? "&" : "?"}v=${Date.now()}`;
-
-  // Siempre seteamos la var
-  const styleVar = {
-    ["--hero-bg" as any]: `url(${chosen})`,
-  } as CSSProperties;
 
   return (
     <section className={styles.hero} aria-label="Hero principal" style={styleVar}>

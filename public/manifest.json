@@ -1,0 +1,53 @@
+{
+  "name": "NABRA - Calzado de Calidad",
+  "short_name": "NABRA",
+  "description": "Pasos que inspiran, zapatos que enamoran. Calzado de calidad para la mujer moderna.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f2e9",
+  "theme_color": "#f7f2e9",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "es-MX",
+  "categories": ["shopping", "fashion"],
+  "icons": [
+    {
+      "src": "/logoNabra.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logoNabra.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/zapateria.jpeg",
+      "sizes": "1280x720",
+      "type": "image/jpeg",
+      "formats": "wide",
+      "label": "NABRA - Catálogo de calzado"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Catálogo",
+      "short_name": "Catálogo",
+      "description": "Ver todos los productos",
+      "url": "/catalogo",
+      "icons": [{ "src": "/logoNabra.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Carrito",
+      "short_name": "Carrito",
+      "description": "Ver carrito de compras",
+      "url": "/carrito",
+      "icons": [{ "src": "/logoNabra.png", "sizes": "96x96" }]
+    }
+  ]
+}
+

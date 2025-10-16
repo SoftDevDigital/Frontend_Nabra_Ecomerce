@@ -101,7 +101,13 @@ function normalizeTotals(payload: any, listLen: number) {
 /* ===== fetchProducts endurecido (REEMPLAZO) ===== */
 export async function fetchProducts(q: ProductsQuery = {}, init?: RequestInit): Promise<ProductsResponse> {
   const url = buildProductsUrl(q);
-  const res = await fetch(url, { cache: "no-store", ...init });
+  
+  // 🚀 OPTIMIZACIÓN: Usar caché inteligente basado en el tipo de consulta
+  const cacheStrategy = q.isFeatured 
+    ? { cache: "force-cache", next: { revalidate: 300 } } // 5 min para destacados
+    : { cache: "force-cache", next: { revalidate: 60 } }; // 1 min para otros
+  
+  const res = await fetch(url, { ...cacheStrategy, ...init });
   const text = await res.text();
   const json = text ? JSON.parse(text) : null;
 
@@ -123,7 +129,11 @@ export async function fetchProducts(q: ProductsQuery = {}, init?: RequestInit): 
 export type CategoryCount = { category: string; count: number };
 
 export async function fetchProductCategories(init?: RequestInit): Promise<CategoryCount[]> {
-  const res = await fetch(`${API_BASE}/products/categories`, { cache: "no-store", ...init });
+  const res = await fetch(`${API_BASE}/products/categories`, { 
+    cache: "force-cache", 
+    next: { revalidate: 600 }, // 10 min para categorías
+    ...init 
+  });
   const text = await res.text();
   const json = text ? JSON.parse(text) : null;
 
@@ -138,7 +148,11 @@ export async function fetchProductCategories(init?: RequestInit): Promise<Catego
 /* --- Detalle por ID: /products/:id ---- */
 export async function fetchProductById(id: string, init?: RequestInit): Promise<ProductDto> {
   if (!id) throw new Error("Falta el id de producto");
-  const res = await fetch(`${API_BASE}/products/${id}`, { cache: "no-store", ...init });
+  const res = await fetch(`${API_BASE}/products/${id}`, { 
+    cache: "force-cache", 
+    next: { revalidate: 300 }, // 5 min para productos individuales
+    ...init 
+  });
   const text = await res.text();
   const json = text ? JSON.parse(text) : null;
 
@@ -162,7 +176,11 @@ export type CategoryStats = {
 export async function fetchCategoryStats(category: string, init?: RequestInit): Promise<CategoryStats> {
   if (!category) throw new Error("Falta la categoría");
   const enc = encodeURIComponent(category);
-  const res = await fetch(`${API_BASE}/products/categories/${enc}/stats`, { cache: "no-store", ...init });
+  const res = await fetch(`${API_BASE}/products/categories/${enc}/stats`, { 
+    cache: "force-cache", 
+    next: { revalidate: 600 }, // 10 min para estadísticas
+    ...init 
+  });
   const text = await res.text();
   const json = text ? JSON.parse(text) : null;
 

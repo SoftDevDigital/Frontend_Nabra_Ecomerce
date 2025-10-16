@@ -1,13 +1,14 @@
 // src/app/components/Featured/Featured.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import styles from "./Featured.module.css";
 import { resolveImageUrls } from "@/lib/resolveImageUrls";
 import { fetchProducts, PRODUCTS_API_BASE, ProductDto } from "@/lib/productsApi";
 import { addToCart } from "@/lib/cartClient";
 import { useRouter } from "next/navigation";
+import OptimizedImage from "../UI/OptimizedImage";
 /* 👇 NUEVO */
 import { useFlyToCart } from "@/app/hooks/useFlyToCart";
 
@@ -107,8 +108,13 @@ export default function Featured() {
     setErr(null);
     setThumbs({});
     try {
-      // ✅ usa el endpoint general con filtro isFeatured
-      const { products } = await fetchProducts({ isFeatured: true, limit: 5, sortBy: "createdAt", sortOrder: "desc" });
+      // ✅ usa el endpoint general con filtro isFeatured y caché
+      const { products } = await fetchProducts({ 
+        isFeatured: true, 
+        limit: 5, 
+        sortBy: "createdAt", 
+        sortOrder: "desc" 
+      });
 
       const list = (products ?? []).slice(0, 5) as Product[];
       setItems(list);
@@ -257,12 +263,16 @@ export default function Featured() {
                 <article key={p._id} className={styles.card}>
                   <Link href={`/producto/${p._id}`} className={styles.imgLink} aria-label={p.name}>
                     <div className={styles.imgBox}>
-                      <img
+                      <OptimizedImage
                         src={img}
                         alt={p.name}
+                        width={300}
+                        height={300}
                         className={styles.img}
-                        /* 👇 NUEVO: identificador para animación */
-                        data-product-img={p._id}
+                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                        quality={85}
+                        placeholder="blur"
+                        dataAttributes={{ "data-product-img": p._id }}
                       />
                     </div>
                   </Link>

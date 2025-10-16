@@ -1,14 +1,37 @@
-export const dynamic = "force-dynamic";
-
+import type { Metadata } from "next";
 import styles from "./page.module.css";
-import Hero from "./components/Hero/Hero";
+import HeroOptimized from "./components/Hero/HeroOptimized";
 import Featured from "./components/Featured/Featured";
-import Footer from "./components/Footer/Footer"; // ⬅️ NUEVO
+import Footer from "./components/Footer/Footer";
+// import StructuredData from "./components/SEO/StructuredData";
+// import { generateMetadata, generateStructuredData } from "@/lib/seo";
+
+const HOME_SEO = {
+  title: "NABRA | Calzado de Calidad para la Mujer Moderna",
+  description: "Descubre nuestra colección de calzado elegante y cómodo. Zapatos que enamoran, pasos que inspiran. Envío gratis en compras mayores a $500.",
+  keywords: [
+    "zapatos mujer",
+    "calzado elegante", 
+    "zapatos cómodos",
+    "moda femenina",
+    "zapatos online",
+    "NABRA",
+    "calzado de calidad",
+    "zapatos trendy",
+    "zapatos México",
+    "calzado premium"
+  ],
+  image: "/zapateria.jpeg",
+  url: "/",
+  type: "website" as const,
+};
+
+// export const metadata: Metadata = generateMetadata(HOME_SEO);
 
 export default function Home() {
   return (
     <main>
-      <Hero />
+      <HeroOptimized />
 
       {/* Franja tipo marquee */}
       <div className={styles.marquee} aria-hidden="true">
