@@ -214,13 +214,7 @@ export default function AuthPage() {
         )}
 
         <div className={styles.testBox} style={{ marginTop: 16 }}>
-          <button
-            type="button"
-            className={styles.ghostBtn ?? styles.primary}
-            onClick={handleProtected}
-          >
-            Probar autenticación (GET /auth/protected)
-          </button>
+          
           {protMsg && <p className={styles.msg} style={{ marginTop: 8 }}>{protMsg}</p>}
         </div>
       </div>

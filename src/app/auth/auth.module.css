@@ -116,3 +116,52 @@
     box-shadow: 0 8px 22px rgba(0,0,0,.35);
   }
 }
+
+
+/* === Fix: estados estáticos, sin “traslucir” sobre fondo blanco === */
+
+/* Botón principal (Entrar / Crear cuenta): siempre negro */
+.primary,
+.primary:hover,
+.primary:active {
+  background: #111 !important;
+  color: #fff !important;
+  border: 1px solid #111 !important;
+  filter: none !important;          /* <- elimina el brillo que “lava” el texto */
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+/* Botón Google: mantenerlo plano y legible sobre panel blanco */
+.googleBtn,
+.googleBtn:hover,
+.googleBtn:active {
+  background: #fff !important;
+  color: #111 !important;
+  border-color: #cfcfcf !important;  /* borde un poco más contrastado */
+  box-shadow: 0 0 0 1px rgba(0,0,0,.05) inset !important; /* separación sutil del panel */
+  transform: none !important;
+}
+
+/* Tabs: sin efectos en hover, solo activo en negro */
+.tab:hover,
+.tab:active {
+  background: #fff !important;
+  color: inherit !important;
+  border-color: #e7e7e7 !important;
+}
+
+/* Accesibilidad: conservamos focus visible */
+.primary:focus-visible,
+.googleBtn:focus-visible,
+.tab:focus-visible,
+.field > input:focus-visible {
+  outline: 3px solid #b4cfd8 !important;
+  outline-offset: 2px !important;
+}
+
+/* (Opcional) micro-mejora de rendering del texto en botones blancos/negros */
+.primary, .googleBtn, .tab {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}

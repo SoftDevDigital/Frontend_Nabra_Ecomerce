@@ -134,7 +134,7 @@ export default function MediaUploadPage() {
       setResult(r.data);
       setMsg(r.message || "Archivo subido ✅");
 
-      // 👇 si es cover, la activamos
+      // 👇 si es cover, la activamos (flujo anterior conservado)
       if (r.data.type === "cover") {
         try {
           const act = await apiFetch<UploadResponse>(`/media/cover-image/${r.data._id}`, {
@@ -182,7 +182,7 @@ export default function MediaUploadPage() {
       setUrlCreated(r.data);
       setUrlMsg("Imagen creada desde URL ✅");
 
-      // Si fue subida como 'cover', activar inmediatamente
+      // Si fue subida como 'cover', activar inmediatamente (flujo anterior conservado)
       if (r.data.type === "cover") {
         try {
           const act = await apiFetch<UploadResponse>(`/media/cover-image/${r.data._id}`, {
@@ -261,7 +261,7 @@ export default function MediaUploadPage() {
     }
   }
 
-  // 🔹 AGREGADO: handler para POST /media/cover-image/:id (requiere token admin)
+  // 🔹 AGREGADO: handler para POST /media/cover-image/:id (requiere token admin) — flujo viejo
   async function handleActivateCover(id: string) {
     if (!id) return;
     setActivateMsg(null);
@@ -287,7 +287,7 @@ export default function MediaUploadPage() {
     }
   }
 
-  // 🔹 NUEVO: handler para POST /media/cover-image/:id/deactivate (requiere token admin)
+  // 🔹 NUEVO: handler para POST /media/cover-image/:id/deactivate — flujo viejo
   async function handleDeactivateCover(id: string) {
     if (!id) return;
     setDeactivateMsg(null);
@@ -313,7 +313,7 @@ export default function MediaUploadPage() {
     }
   }
 
-  /* 🔹🔹🔹 NUEVO: Desactivar la portada activa SIN conocer el ID */
+  /* 🔹🔹🔹 NUEVO: Desactivar la portada activa SIN conocer el ID — flujo viejo */
   async function handleDeactivateActiveCover() {
     setDeactivateMsg(null);
     setActiveMsg(null);
@@ -350,7 +350,7 @@ export default function MediaUploadPage() {
     }
   }
 
-  /* 🔹🔹🔹 NUEVO: GET /media/cover-image/active/url */
+  /* 🔹🔹🔹 NUEVO: GET /media/cover-image/active/url — flujo viejo */
   async function handleGetActiveCover() {
     setActiveMsg(null);
     setActiveCoverUrl(null);
@@ -384,6 +384,64 @@ export default function MediaUploadPage() {
   const apiBase = getApiBase();
   const joinUrl = (u: string) => `${apiBase}/${u}`.replace(/([^:]\/)\/+/g, "$1");
   const toAbsolute = (u?: string) => (u && /^https?:\/\//i.test(u) ? u : u ? joinUrl(u) : "");
+
+  /* ===================== NUEVO: GALERÍAS y SET-COVER (endpoints nuevos) ===================== */
+  type GalleryResponse = { success: true; data: MediaDoc[] };
+  const [productGallery, setProductGallery] = useState<MediaDoc[]>([]);
+  const [coverGallery, setCoverGallery] = useState<MediaDoc[]>([]);
+  const [activeCoverNew, setActiveCoverNew] = useState<{ url: string; _id?: string } | null>(null);
+  const [galleryMsg, setGalleryMsg] = useState<string | null>(null);
+  const [settingCoverId, setSettingCoverId] = useState<string | null>(null);
+
+  async function fetchGallery(kind: "products" | "covers"): Promise<GalleryResponse> {
+    const path = kind === "products" ? "/media/gallery/products" : "/media/gallery/covers";
+    return apiFetch<GalleryResponse>(path, { method: "GET" });
+  }
+  async function getActiveCoverNew() {
+    // el back puede devolver string o { url, _id }
+    const res = await apiFetch<any>("/media/cover/active", { method: "GET" });
+    const data = (res as any)?.data ?? res;
+    if (!data) return null;
+    if (typeof data === "string") return { url: data } as { url: string };
+    return data as { url: string; _id?: string };
+  }
+  async function setAsCoverNew(imageId: string) {
+    return apiFetch<{ success: true; data: MediaDoc }>(`/media/${imageId}/set-cover`, { method: "POST" });
+  }
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    (async () => {
+      try {
+        setGalleryMsg(null);
+        const [gp, gc, ac] = await Promise.all([
+          fetchGallery("products"),
+          fetchGallery("covers"),
+          getActiveCoverNew(),
+        ]);
+        setProductGallery(gp.data || []);
+        setCoverGallery(gc.data || []);
+        setActiveCoverNew(ac);
+      } catch (e: any) {
+        setGalleryMsg(e?.message || "No se pudieron cargar las galerías");
+      }
+    })();
+  }, [isAdmin]);
+
+  async function handleSetCoverNew(id: string) {
+    setSettingCoverId(id);
+    try {
+      await setAsCoverNew(id);
+      const ac = await getActiveCoverNew();
+      setActiveCoverNew(ac);
+      setActivateMsg("Portada cambiada (nuevo endpoint) ✅");
+    } catch (e: any) {
+      setActivateMsg(e?.message || "No se pudo marcar como portada (nuevo endpoint)");
+    } finally {
+      setSettingCoverId(null);
+    }
+  }
+  /* ================== FIN NUEVO: GALERÍAS y SET-COVER (endpoints nuevos) =================== */
 
   return (
     <main style={{ maxWidth: 720, margin: "24px auto", padding: "0 16px" }}>
@@ -629,7 +687,7 @@ export default function MediaUploadPage() {
             {/* 🔹 AGREGADO: botones de acciones (SOLO ADMIN) */}
             {isAdmin && (
               <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {/* Activar como portada: solo si es "cover" */}
+                {/* Activar como portada: solo si es "cover" (flujo viejo) */}
                 {result.type === "cover" && (
                   <button
                     type="button"
@@ -649,7 +707,7 @@ export default function MediaUploadPage() {
                   </button>
                 )}
 
-                {/* NUEVO: Desactivar portada (si es cover y está activa) */}
+                {/* NUEVO: Desactivar portada (si es cover y está activa) — flujo viejo */}
                 {result.type === "cover" && result.active && (
                   <button
                     type="button"
@@ -799,7 +857,7 @@ export default function MediaUploadPage() {
             {/* 🔹 AGREGADO: botones de acciones (SOLO ADMIN) */}
             {isAdmin && (
               <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {/* Activar como portada: solo si es "cover" */}
+                {/* Activar como portada: solo si es "cover" (flujo viejo) */}
                 {lookupResult.type === "cover" && (
                   <button
                     type="button"
@@ -808,7 +866,7 @@ export default function MediaUploadPage() {
                     style={{
                       padding: "8px 12px",
                       borderRadius: 8,
-                      border: "1px solid #ddd",
+                     border: "1px solid #ddd",
                       background: activatingId === lookupResult._id ? "#f3f3f3" : "white",
                       cursor: activatingId === lookupResult._id ? "default" : "pointer",
                       fontWeight: 600,
@@ -819,7 +877,7 @@ export default function MediaUploadPage() {
                   </button>
                 )}
 
-                {/* NUEVO: Desactivar portada (si es cover y está activa) */}
+                {/* NUEVO: Desactivar portada (si es cover y está activa) — flujo viejo */}
                 {lookupResult.type === "cover" && lookupResult.active && (
                   <button
                     type="button"
@@ -863,7 +921,7 @@ export default function MediaUploadPage() {
         )}
       </section>
 
-      {/* ==================== NUEVO: BOTÓN PARA CONSULTAR PORTADA ACTIVA ==================== */}
+      {/* ==================== NUEVO: BOTÓN PARA CONSULTAR PORTADA ACTIVA (flujo viejo) ==================== */}
       <section style={{ marginTop: 24 }}>
         <h2 style={{ fontSize: 18, marginBottom: 8 }}>Portada activa (GET /media/cover-image/active/url)</h2>
         <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
@@ -962,6 +1020,68 @@ export default function MediaUploadPage() {
           </div>
         )}
       </section>
+
+      {/* ==================== NUEVO: GALERÍAS + SET-COVER (endpoints nuevos) ==================== */}
+      <section style={{ marginTop: 24 }}>
+        <h2 style={{ fontSize: 18, marginBottom: 8 }}>Galería de Portadas (GET /media/gallery/covers)</h2>
+        {galleryMsg && <p style={{ color: "crimson", marginTop: 0 }}>{galleryMsg}</p>}
+        {!coverGallery.length ? (
+          <p>No hay portadas.</p>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px,1fr))", gap: 10 }}>
+            {coverGallery.map(m => (
+              <article key={m._id} style={{ border: "1px solid #eee", borderRadius: 10, padding: 8 }}>
+                <img src={toAbsolute(m.url)} alt={m.fileName} style={{ width: "100%", borderRadius: 8 }} />
+                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                  <button
+                    onClick={() => handleSetCoverNew(m._id)}
+                    disabled={settingCoverId === m._id}
+                    title="Marcar como portada activa (nuevo endpoint)"
+                    style={{
+                      padding: "6px 10px",
+                      borderRadius: 8,
+                      border: "1px solid #ddd",
+                      background: settingCoverId === m._id ? "#f3f3f3" : "white",
+                      cursor: settingCoverId === m._id ? "default" : "pointer",
+                    }}
+                  >
+                    {settingCoverId === m._id ? "Marcando…" : "Marcar como portada"}
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+
+        <div style={{ marginTop: 12 }}>
+          <strong>Portada activa (nuevo endpoint): </strong>
+          {activeCoverNew?.url ? (
+            <>
+              <code style={{ background:"#f7f7f7", padding:"2px 6px", borderRadius:6 }}>{activeCoverNew.url}</code>
+              <div style={{ marginTop: 8 }}>
+                <img src={activeCoverNew.url} alt="Portada activa" style={{ maxWidth: 360, borderRadius: 8, border: "1px solid #eee" }} />
+              </div>
+            </>
+          ) : "No hay portada activa."}
+        </div>
+      </section>
+
+      <section style={{ marginTop: 24 }}>
+        <h2 style={{ fontSize: 18, marginBottom: 8 }}>Galería de Productos (GET /media/gallery/products)</h2>
+        {!productGallery.length ? (
+          <p>No hay imágenes.</p>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px,1fr))", gap: 10 }}>
+            {productGallery.map(m => (
+              <article key={m._id} style={{ border: "1px solid #eee", borderRadius: 10, padding: 8 }}>
+                <img src={toAbsolute(m.url)} alt={m.fileName} style={{ width: "100%", borderRadius: 8 }} />
+                <small style={{ display:"block", marginTop:6, opacity:.7 }}>{m.fileName}</small>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+      {/* ================== FIN NUEVO: GALERÍAS + SET-COVER ================== */}
 
       {/* 🔹 AGREGADO: mensajes globales */}
       {deleteMsg && (

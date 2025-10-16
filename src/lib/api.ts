@@ -47,3 +47,23 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   // Si no vino JSON, devolvés el texto crudo (por si alguna ruta no responde JSON)
   return (json ?? (raw as unknown)) as T;
 }
+
+export async function apiFetchMultipart<T = any>(path: string, init?: RequestInit): Promise<T> {
+  const base = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3001";
+  const token = typeof window !== "undefined" ? localStorage.getItem("nabra_token") : null;
+
+  const res = await fetch(`${base}${path}`, {
+    method: init?.method ?? "POST",
+    headers: {
+      Accept: "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      // ¡OJO! NO seteamos Content-Type con FormData
+      ...(init?.headers ?? {}),
+    },
+    body: init?.body,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || json?.success === false) throw new Error(json?.message || `HTTP ${res.status}`);
+  return json as T;
+}
+

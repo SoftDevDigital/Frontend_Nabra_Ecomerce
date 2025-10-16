@@ -1,7 +1,7 @@
 // src/app/admin/productos/nuevo/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import s from "./AdminCreateProduct.module.css";
@@ -72,6 +72,25 @@ function getBearer(): string | null {
   catch { return null; }
 }
 
+/* ===== NUEVO: helper local para multipart sin tocar lib/api.ts ===== */
+async function apiFetchMultipart<T = any>(path: string, body: FormData, method: "POST" | "PUT" = "POST"): Promise<T> {
+  const base = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3001";
+  const token = getBearer();
+  const res = await fetch(`${base}${path}`, {
+    method,
+    headers: {
+      Accept: "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || (json && json.success === false)) {
+    throw new Error(json?.message || `HTTP ${res.status}`);
+  }
+  return json as T;
+}
+
 export default function AdminCreateProductPage() {
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -105,6 +124,10 @@ export default function AdminCreateProductPage() {
   // Agregar imagen
   const [addImageUrl, setAddImageUrl] = useState("");
   const [addingImg, setAddingImg] = useState(false);
+
+  // ===== NUEVO: input de archivos para imágenes del producto =====
+  const imagesInputRef = useRef<HTMLInputElement | null>(null);
+  const [imageFiles, setImageFiles] = useState<FileList | null>(null);
 
   useEffect(() => { setIsAdmin(isAdminFromToken()); }, []);
   useEffect(() => { if (isAdmin) void loadAllProducts(); }, [isAdmin]);
@@ -167,7 +190,44 @@ export default function AdminCreateProductPage() {
 
     const images = parseCsvToArray(imagesText);
 
-    // ❗ No enviar isActive: el backend lo rechaza
+    // ===== NUEVO: si hay archivos, usar multipart para que el backend suba y genere URLs =====
+    if (imageFiles && imageFiles.length) {
+      const fd = new FormData();
+      fd.append("name", name.trim());
+      fd.append("description", description.trim());
+      fd.append("price", String(p));
+      fd.append("category", category.trim());
+      fd.append("stock", String(s));
+      fd.append("isPreorder", String(!!isPreorder));
+      fd.append("isFeatured", String(!!isFeatured));
+      sizes.forEach(sz => fd.append("sizes", sz)); // array
+      Array.from(imageFiles).forEach(f => fd.append("images", f)); // múltiples archivos
+
+      setCreating(true);
+      try {
+        const r = await apiFetchMultipart<CreateResponse>("/products", fd, "POST");
+        if (!("success" in r) || !r.success) throw new Error(("message" in r && r.message) || "No se pudo crear el producto");
+        setCreated(r.data);
+        setMsg("Producto creado ✅");
+
+        // reset
+        setName(""); setDescription(""); setPrice(""); setCategory("");
+        setSizesText(""); setImagesText(""); setStock("");
+        setIsPreorder(false); setIsFeatured(false); setIsActive(true);
+        if (imagesInputRef.current) imagesInputRef.current.value = "";
+        setImageFiles(null);
+        setEditing(false); setEditId("");
+
+        void loadAllProducts();
+      } catch (err: any) {
+        const m = err?.message || "No se pudo crear el producto";
+        setMsg(m);
+        if (/(no autenticado|credenciales|401)/i.test(m)) window.location.href = "/auth?redirectTo=/admin/productos/nuevo";
+      } finally { setCreating(false); }
+      return;
+    }
+
+    // ❗ Si NO hay archivos, mantenemos tu flujo original por JSON (CSV/IDs/URLs)
     const body: ProductIn = {
       name: name.trim(),
       description: description.trim(),
@@ -344,6 +404,8 @@ export default function AdminCreateProductPage() {
     setName(""); setDescription(""); setPrice(""); setCategory("");
     setSizesText(""); setImagesText(""); setStock("");
     setIsPreorder(false); setIsFeatured(false); setIsActive(true);
+    if (imagesInputRef.current) imagesInputRef.current.value = "";
+    setImageFiles(null);
   }
 
   return (
@@ -463,10 +525,27 @@ export default function AdminCreateProductPage() {
               </label>
             </div>
 
+            {/* ===== NUEVO: input de archivos ===== */}
+            <label className={s.field}>
+              <span className={s.lbl}>Imágenes del producto (archivos)</span>
+              <input
+                ref={imagesInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={(e) => setImageFiles(e.target.files)}
+                className={s.input}
+              />
+              <small className={s.help}>
+                Si subís archivos acá, el backend los guarda en <code>uploads/</code>, genera URLs y completa <code>images[]</code>.
+              </small>
+            </label>
+
+            {/* Mantengo tu CSV como fallback */}
             <label className={s.field}>
               <span className={s.lbl}>Imágenes (CSV, opcional)</span>
               <input value={imagesText} onChange={(e) => setImagesText(e.target.value)} placeholder="id1,id2 o urls absolutas" className={s.input}/>
-              <small className={s.help}>Acepta IDs de media o URLs completas. Dejar vacío si no aplica.</small>
+              <small className={s.help}>Si no adjuntás archivos, se toma este CSV (IDs/URLs existentes).</small>
             </label>
 
             <div className={s.switchRow}>
