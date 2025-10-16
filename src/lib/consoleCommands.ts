@@ -179,3 +179,4 @@ export function setupConsoleCommands() {
   console.log('Type nabra.performance.report() to generate a performance report');
 }
 
+
