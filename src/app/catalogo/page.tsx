@@ -111,7 +111,6 @@ function CatalogoPageInner() {
   const [addingId, setAddingId] = useState<string | null>(null);
   const [addMsgGlobal, setAddMsgGlobal] = useState<string | null>(null);
   const [sizeById, setSizeById] = useState<Record<string, string>>({});
-  const [colorById, setColorById] = useState<Record<string, string>>({});
   const [addMsgById, setAddMsgById] = useState<Record<string, string | null>>({});
   function setCardMsg(id: string, msg: string | null) {
     setAddMsgById((m) => ({ ...m, [id]: msg }));
@@ -256,9 +255,9 @@ function CatalogoPageInner() {
           sizeToSend = chosen;
         }
       }
-      const colorToSend = (colorById[productId] || "").trim() || undefined;
 
-      await addToCart({ productId, quantity: 1, size: sizeToSend, color: colorToSend });
+      // 👇 Quitamos color del flujo
+      await addToCart({ productId, quantity: 1, size: sizeToSend });
 
       /* ✨ NUEVO: animación fly-to-cart */
       const imgEl = document.querySelector<HTMLImageElement>(`[data-product-img="${productId}"]`);
@@ -613,16 +612,6 @@ function CatalogoPageInner() {
                             <option key={sz} value={sz}>{sz}</option>
                           ))}
                         </select>
-                      </label>
-
-                      <label className={s.inlineField}>
-                        <span className={s.inlineLabel}>Color</span>
-                        <input
-                          value={colorById[p._id] || ""}
-                          onChange={(e) => setColorById((c) => ({ ...c, [p._id]: e.target.value }))}
-                          placeholder="Rojo, Azul…"
-                          className={s.inlineInput}
-                        />
                       </label>
                     </div>
                   )}

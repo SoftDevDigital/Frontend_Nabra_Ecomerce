@@ -1156,13 +1156,7 @@ async function handleFetchMxShipping(e: React.FormEvent) {
             onChange={(e) => setAddSize(e.target.value)}
             style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
           />
-          <input
-            className={s.input}
-            placeholder="Color (opcional)"
-            value={addColor}
-            onChange={(e) => setAddColor(e.target.value)}
-            style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}
-          />
+         
           <button
             type="submit"
             disabled={adding || !addProductId}
