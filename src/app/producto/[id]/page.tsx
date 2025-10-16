@@ -213,16 +213,7 @@ export default function ProductDetail() {
                 </label>
               )}
 
-              <label className={s.field}>
-                <span className={s.label}>Color (opcional)</span>
-                <input
-                  value={color}
-                  onChange={(e) => setColor(e.target.value)}
-                  placeholder="Rojo, Azul…"
-                  className={s.input}
-                  disabled={noStock}
-                />
-              </label>
+             
             </div>
 
             <div className={s.actions}>

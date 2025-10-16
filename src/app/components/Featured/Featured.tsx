@@ -298,15 +298,7 @@ export default function Featured() {
                           </select>
                         </label>
 
-                        <label style={{ display: "grid", gap: 4 }}>
-                          <span style={{ fontSize: 12, opacity: 0.8 }}>Color (opcional)</span>
-                          <input
-                            value={colorById[p._id] || ""}
-                            onChange={(e) => setColorById((c) => ({ ...c, [p._id]: e.target.value }))}
-                            placeholder="Rojo, Azul…"
-                            style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", minWidth: 140 }}
-                          />
-                        </label>
+                      
                       </div>
                     )}
 
