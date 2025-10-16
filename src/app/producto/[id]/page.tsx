@@ -249,12 +249,7 @@ export default function ProductDetail() {
             </div>
           </form>
 
-          {(p.createdAt || p.updatedAt) && (
-            <div className={s.metaBlock}>
-              {p.createdAt && <p className={s.meta}><strong>Creado:</strong> {formatDate(p.createdAt)}</p>}
-              {p.updatedAt && <p className={s.meta}><strong>Actualizado:</strong> {formatDate(p.updatedAt)}</p>}
-            </div>
-          )}
+         
         </aside>
       </div>
 
