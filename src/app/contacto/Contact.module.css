@@ -98,7 +98,11 @@
   text-decoration: none; /* para <a> con clase btn */
   display:inline-flex; align-items:center; justify-content:center;
 }
-.btn:hover{ filter: brightness(.96); }
+.btn:hover{ 
+  background: var(--gray-50);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
 .btn:active{ transform: translateY(1px); }
 
 .btnPrimary{

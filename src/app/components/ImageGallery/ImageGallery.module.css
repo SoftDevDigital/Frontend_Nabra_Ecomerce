@@ -1,0 +1,454 @@
+/* Contenedor principal de la galería */
+.galleryContainer {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #e9ecef;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+}
+
+.galleryContainer:hover {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+/* Sin imágenes */
+.noImages {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  background: #f8f9fa;
+  border: 2px dashed #dee2e6;
+  border-radius: 12px;
+  color: #6c757d;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+/* Wrapper de imagen principal */
+.imageWrapper {
+  position: relative;
+  width: 100%;
+  height: 350px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8f9fa;
+  overflow: hidden;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.imageWrapper:hover {
+  transform: scale(1.02);
+}
+
+/* Overlay de zoom */
+.zoomOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  border-radius: 8px;
+}
+
+.imageWrapper:hover .zoomOverlay {
+  opacity: 1;
+}
+
+.zoomIcon {
+  width: 48px;
+  height: 48px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #2c5aa0;
+  transition: all 0.3s ease;
+}
+
+.zoomIcon:hover {
+  background: #fff;
+  transform: scale(1.1);
+}
+
+/* Imagen principal - tamaño reducido */
+.mainImage {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  transition: transform 0.3s ease;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* Miniaturas */
+.thumbnailImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
+  transition: transform 0.3s ease;
+}
+
+/* Botones de navegación */
+.navButton {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  color: #495057;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  z-index: 10;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.navButton:hover {
+  background: #fff;
+  color: #2c5aa0;
+  transform: translateY(-50%) scale(1.1);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+
+.navButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: translateY(-50%);
+}
+
+.navButton:disabled:hover {
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.95);
+  color: #495057;
+}
+
+.navLeft {
+  left: 16px;
+}
+
+.navRight {
+  right: 16px;
+}
+
+/* Modal de zoom */
+.zoomModal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.95);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.zoomContent {
+  position: relative;
+  width: 90vw;
+  height: 90vh;
+  max-width: 1200px;
+  max-height: 800px;
+  cursor: default;
+  display: flex;
+  flex-direction: column;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* Contenedor de imagen con zoom */
+.zoomImageContainer {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+
+.zoomImage {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  transition: transform 0.1s ease;
+  user-select: none;
+}
+
+/* Navegación en modal */
+.modalNavButton {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 50px;
+  height: 50px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  z-index: 10;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.modalNavButton:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-50%) scale(1.1);
+}
+
+.modalNavLeft {
+  left: 20px;
+}
+
+.modalNavRight {
+  right: 20px;
+}
+
+/* Botón cerrar */
+.closeButton {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 10;
+}
+
+.closeButton:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
+}
+
+/* Contador de imagen en modal */
+.modalImageCounter {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Estilos personalizados para react-image-gallery */
+.galleryContainer :global(.image-gallery) {
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.galleryContainer :global(.image-gallery-slide) {
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.galleryContainer :global(.image-gallery-thumbnails) {
+  background: #fff;
+  border-top: 1px solid #e9ecef;
+  padding: 12px;
+}
+
+.galleryContainer :global(.image-gallery-thumbnail) {
+  border: 2px solid transparent;
+  border-radius: 6px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  width: 80px;
+  height: 80px;
+}
+
+.galleryContainer :global(.image-gallery-thumbnail:hover) {
+  border-color: #2c5aa0;
+  transform: scale(1.05);
+}
+
+.galleryContainer :global(.image-gallery-thumbnail.active) {
+  border-color: #2c5aa0;
+  box-shadow: 0 0 0 2px #2c5aa0;
+}
+
+.galleryContainer :global(.image-gallery-thumbnail img) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.galleryContainer :global(.image-gallery-thumbnails-container) {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #c1c1c1 #f1f1f1;
+}
+
+.galleryContainer :global(.image-gallery-thumbnails-container::-webkit-scrollbar) {
+  height: 4px;
+}
+
+.galleryContainer :global(.image-gallery-thumbnails-container::-webkit-scrollbar-track) {
+  background: #f1f1f1;
+  border-radius: 2px;
+}
+
+.galleryContainer :global(.image-gallery-thumbnails-container::-webkit-scrollbar-thumb) {
+  background: #c1c1c1;
+  border-radius: 2px;
+}
+
+.galleryContainer :global(.image-gallery-thumbnails-container::-webkit-scrollbar-thumb:hover) {
+  background: #a8a8a8;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .imageWrapper {
+    height: 300px;
+  }
+  
+  .galleryContainer :global(.image-gallery-thumbnail) {
+    width: 60px;
+    height: 60px;
+  }
+  
+  .navButton {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .navLeft {
+    left: 12px;
+  }
+  
+  .navRight {
+    right: 12px;
+  }
+  
+  .fullscreenButton {
+    width: 32px;
+    height: 32px;
+    top: 12px;
+    right: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .imageWrapper {
+    height: 250px;
+  }
+  
+  .galleryContainer :global(.image-gallery-thumbnail) {
+    width: 50px;
+    height: 50px;
+  }
+  
+  .navButton {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .fullscreenButton {
+    width: 28px;
+    height: 28px;
+  }
+}
+
+@media (max-width: 360px) {
+  .imageWrapper {
+    height: 200px;
+  }
+  
+  .galleryContainer :global(.image-gallery-thumbnail) {
+    width: 44px;
+    height: 44px;
+  }
+  
+  .navButton {
+    width: 28px;
+    height: 28px;
+  }
+  
+  .fullscreenButton {
+    width: 24px;
+    height: 24px;
+  }
+}
+
+/* Animaciones */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.galleryContainer {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Mejoras de accesibilidad */
+.navButton:focus,
+.fullscreenButton:focus {
+  outline: 2px solid #2c5aa0;
+  outline-offset: 2px;
+}
+
+/* Efectos de transición suaves */
+.imageWrapper,
+.mainImage {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}

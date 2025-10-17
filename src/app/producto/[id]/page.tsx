@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { resolveImageUrls } from "@/lib/resolveImageUrls";
 import { addToCart } from "@/lib/cartClient";
 import { fetchProductReviews, createReview, deleteReview, likeReview, Review } from "@/lib/reviewsApi";
+import ProductImageGallery from "@/app/components/ImageGallery/ImageGallery";
 import s from "./ProductDetail.module.css"; // 👈 NUEVO
 
 type RatingDistribution = { "1"?: number; "2"?: number; "3"?: number; "4"?: number; "5"?: number; };
@@ -143,18 +144,16 @@ export default function ProductDetail() {
   return (
     <main className={s.page}>
       <div className={s.grid}>
-        {/* Galería */}
-      <section className={`${s.gallery} ${imgs.length === 1 ? s.gallerySingle : ""}`}>
-  {!!imgs.length && imgs.map((src, i) => (
-    <img
-      key={src + i}
-      src={src}
-      alt={`${p.name} ${i + 1}`}
-      className={s.galleryImg}
-      loading="lazy"
-    />
-  ))}
-</section>
+        {/* Galería con zoom y miniaturas */}
+        <section className={s.gallery}>
+          {imgs.length > 0 ? (
+            <ProductImageGallery images={imgs} productName={p.name} />
+          ) : (
+            <div className={s.noImage}>
+              <p>No hay imágenes disponibles</p>
+            </div>
+          )}
+        </section>
 
         {/* Buy card (sticky en desktop) */}
         <aside className={s.buyCard}>
@@ -168,14 +167,6 @@ export default function ProductDetail() {
               {noStock && <span className={s.badgeWarn}>Sin stock</span>}
             </div>
           </div>
-
-          {p.category && <div className={s.meta}><strong>Categoría:</strong> {p.category}</div>}
-          {typeof p.stock === "number" && <div className={s.meta}><strong>Stock:</strong> {p.stock}</div>}
-          {Array.isArray(p.sizes) && p.sizes.length > 0 && (
-            <div className={s.meta}><strong>Talles:</strong> {p.sizes.join(", ")}</div>
-          )}
-
-          {p.description && <p className={s.desc}>{p.description}</p>}
 
           <div className={s.divider} />
 
@@ -212,8 +203,6 @@ export default function ProductDetail() {
                   </select>
                 </label>
               )}
-
-             
             </div>
 
             <div className={s.actions}>
@@ -239,10 +228,45 @@ export default function ProductDetail() {
               )}
             </div>
           </form>
-
-         
         </aside>
       </div>
+
+      {/* Información del producto debajo de las imágenes */}
+      <section className={s.productInfo}>
+        <div className={s.infoCard}>
+          <h2 className={s.h2}>Información del Producto</h2>
+          
+          <div className={s.infoGrid}>
+            {p.category && (
+              <div className={s.infoItem}>
+                <strong className={s.infoLabel}>Categoría:</strong>
+                <span className={s.infoValue}>{p.category}</span>
+              </div>
+            )}
+            
+            {typeof p.stock === "number" && (
+              <div className={s.infoItem}>
+                <strong className={s.infoLabel}>Stock:</strong>
+                <span className={s.infoValue}>{p.stock} unidades</span>
+              </div>
+            )}
+            
+            {Array.isArray(p.sizes) && p.sizes.length > 0 && (
+              <div className={s.infoItem}>
+                <strong className={s.infoLabel}>Talles disponibles:</strong>
+                <span className={s.infoValue}>{p.sizes.join(", ")}</span>
+              </div>
+            )}
+          </div>
+
+          {p.description && (
+            <div className={s.descriptionSection}>
+              <h3 className={s.h3}>Descripción</h3>
+              <p className={s.description}>{p.description}</p>
+            </div>
+          )}
+        </div>
+      </section>
 
       {/* Opiniones */}
       {p.reviewStats && (

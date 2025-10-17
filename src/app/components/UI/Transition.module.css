@@ -1,0 +1,116 @@
+/* Transiciones globales */
+.transition {
+  transition: all var(--transition-normal);
+}
+
+/* Fade */
+.fade {
+  opacity: 0;
+}
+
+.fade.visible {
+  opacity: 1;
+}
+
+.fade.hidden {
+  opacity: 0;
+}
+
+/* Slide */
+.slide {
+  transform: translateY(20px);
+  opacity: 0;
+}
+
+.slide.visible {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.slide.hidden {
+  transform: translateY(-20px);
+  opacity: 0;
+}
+
+/* Scale */
+.scale {
+  transform: scale(0.9);
+  opacity: 0;
+}
+
+.scale.visible {
+  transform: scale(1);
+  opacity: 1;
+}
+
+.scale.hidden {
+  transform: scale(0.9);
+  opacity: 0;
+}
+
+/* Bounce */
+.bounce {
+  transform: scale(0.3);
+  opacity: 0;
+}
+
+.bounce.visible {
+  transform: scale(1);
+  opacity: 1;
+  animation: bounceIn 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.bounce.hidden {
+  transform: scale(0.3);
+  opacity: 0;
+}
+
+@keyframes bounceIn {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  70% {
+    transform: scale(0.9);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Slide desde la derecha */
+.slideRight {
+  transform: translateX(100%);
+  opacity: 0;
+}
+
+.slideRight.visible {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.slideRight.hidden {
+  transform: translateX(100%);
+  opacity: 0;
+}
+
+/* Slide desde la izquierda */
+.slideLeft {
+  transform: translateX(-100%);
+  opacity: 0;
+}
+
+.slideLeft.visible {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.slideLeft.hidden {
+  transform: translateX(-100%);
+  opacity: 0;
+}
+
