@@ -312,7 +312,7 @@ export default function Featured() {
                       </div>
                     )}
 
-                    <div className={styles.ctaContainer}>
+                    <div style={{ display: "flex", gap: 8 }}>
                       <Link href={`/producto/${p._id}`} className={styles.cta}>
                         Ver detalle
                       </Link>
@@ -323,8 +323,9 @@ export default function Featured() {
                           (needsSizeSelection && !(sizeById[p._id] || "").trim()) ||
                           noStock
                         }
-                        className={styles.ctaSecondary}
+                        className={styles.cta}
                         title={noStock ? "Sin stock" : "Agregar al carrito"}
+                        style={{ background: "white", border: "1px solid #ddd", color: "#111" }}
                       >
                         {addingId === p._id ? "Agregando…" : noStock ? "Sin stock" : "Agregar"}
                       </button>

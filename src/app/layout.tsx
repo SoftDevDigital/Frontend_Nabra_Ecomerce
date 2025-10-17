@@ -3,7 +3,6 @@ import type { Metadata } from "next";
 import "./globals.css";
 import AnnouncementBar from "./components/AnnouncementBar/AnnouncementBar";
 import Header from "./components/Header/Header";
-import Footer from "./components/Footer/Footer";
 import WhatsAppFloat from "./components/WhatsAppFloat/WhatsAppFloat";
 // import SimplePerformanceMonitor from "./components/Performance/SimplePerformanceMonitor";
 
@@ -83,7 +82,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AnnouncementBar />
         <Header />
         {children}
-        <Footer />
 
         {/* 👇 Botón flotante global */}
         <WhatsAppFloat
