@@ -1658,9 +1658,7 @@ async function handleFetchMxShipping(e: React.FormEvent) {
                   {it.color ? `• Color ${it.color}` : ""}{" "}
                   {typeof it.price === "number" ? `• ${currency(it.price)}` : ""}
                 </div>
-                <div style={{ opacity: 0.8, fontSize: 14 }}>
-                  prodId: {it.product?._id ?? "-"} • itemId: {it._id}
-                </div>
+                
 
                 <div className={s.itemControls} style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center", flexWrap: "wrap" }}>
                   <label style={{ display: "flex", alignItems: "center", gap: 6 }}>

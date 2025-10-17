@@ -3,9 +3,11 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { resolveImageUrls } from "@/lib/resolveImageUrls";
-import { addToCart } from "@/lib/cartClient";
+import { addToCart, getCart } from "@/lib/cartClient";
 import { fetchProductReviews, createReview, deleteReview, likeReview, Review } from "@/lib/reviewsApi";
 import s from "./ProductDetail.module.css"; // 👈 NUEVO
+import { setCartBadgeCount, computeItemsCount } from "@/lib/cartBadge";
+
 
 type RatingDistribution = { "1"?: number; "2"?: number; "3"?: number; "4"?: number; "5"?: number; };
 type ReviewStats = { totalReviews: number; averageRating: number; ratingDistribution?: RatingDistribution; };
@@ -39,6 +41,35 @@ function formatDate(iso?: string) {
     const d = new Date(iso);
     return new Intl.DateTimeFormat("es-AR", { dateStyle: "medium", timeStyle: "short" }).format(d);
   } catch { return iso; }
+}
+
+/* 🔔 NUEVO: helpers para sincronizar el contador con el Header (mismo esquema que Catálogo) */
+async function fetchCartTotalCount(): Promise<number | null> {
+  try {
+    const token = typeof window !== "undefined" ? localStorage.getItem("nabra_token") : null;
+    const res = await fetch(`${API_BASE}/cart/total`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    const raw = await res.json();
+    const data = raw?.success ? raw.data : raw;
+    const count =
+      typeof data?.totalQuantity === "number"
+        ? data.totalQuantity
+        : (typeof data?.totalItems === "number" ? data.totalItems : null);
+    return typeof count === "number" ? count : null;
+  } catch {
+    return null;
+  }
+}
+function emitCartCount(count: number) {
+  try {
+    localStorage.setItem("cart_count", String(count));
+    window.dispatchEvent(new CustomEvent("cart:count", { detail: { count } }));
+  } catch { /* noop */ }
 }
 
 export default function ProductDetail() {
@@ -79,21 +110,34 @@ export default function ProductDetail() {
   }, [p?._id, revPage]);
 
   async function handleAdd(e: React.FormEvent) {
-    e.preventDefault();
-    if (!p?._id) return;
-    setAdding(true); setAddMsg(null);
-    try {
-      await addToCart({ productId: p._id, quantity: qty, size: size || undefined, color: color || undefined });
-      setAddMsg("Producto agregado al carrito ✅");
-      // router.push("/carrito");
-    } catch (err: any) {
-      const msg = String(err?.message || "No se pudo agregar");
-      setAddMsg(msg);
-      if (msg.toLowerCase().includes("no autenticado")) {
-        router.push(`/auth?redirectTo=/producto/${p._id}`);
-      }
-    } finally { setAdding(false); }
-  }
+  e.preventDefault();
+  if (!p?._id) return;
+  setAdding(true); setAddMsg(null);
+  try {
+    await addToCart({ productId: p._id, quantity: qty, size: size || undefined, color: color || undefined });
+
+    // ✅ volver a leer el carrito y actualizar el contador
+    const cart = await getCart();                 // obtiene el carrito actualizado (server/localStorage/cookie)
+    const newCount = computeItemsCount(cart);     // total de ítems a partir del carrito
+    setCartBadgeCount(newCount);                  // pinta el número en el ícono
+    window.dispatchEvent(new CustomEvent("cart:updated", { detail: { count: newCount } })); // notifica a otros comps
+
+    /* 🔔 NUEVO: sincronizar con el Header como en Catálogo */
+    const serverCount = await fetchCartTotalCount();     // intenta usar el total del backend
+    const finalCount = typeof serverCount === "number" ? serverCount : newCount;
+    setCartBadgeCount(finalCount);                       // refuerza el número en el ícono
+    emitCartCount(finalCount);                           // emite el evento 'cart:count' que escucha el Header
+
+    setAddMsg("Producto agregado al carrito ✅");
+    // router.push("/carrito");
+  } catch (err: any) {
+    const msg = String(err?.message || "No se pudo agregar");
+    setAddMsg(msg);
+    if (msg.toLowerCase().includes("no autenticado")) {
+      router.push(`/auth?redirectTo=/producto/${p._id}`);
+    }
+  } finally { setAdding(false); }
+}
 
   useEffect(() => {
     if (!id) return;

@@ -120,11 +120,42 @@ function parseStockBySize(input: string): Record<string, number> {
 function normalizeStockBySize(val: ProductOut["stockBySize"]): Record<string, number> | null {
   try {
     if (!val) return null;
-    if (typeof val === "string") return JSON.parse(val);
-    if (typeof val === "object") return val;
+
+    // 🔹 Caso 1: viene como string JSON
+    if (typeof val === "string") {
+      const parsed = JSON.parse(val);
+      return normalizeStockBySize(parsed); // reusar la misma lógica
+    }
+
+    // 🔹 Caso 2: viene como array → convertir solo los valores válidos
+    if (Array.isArray(val)) {
+      const out: Record<string, number> = {};
+      val.forEach((v, i) => {
+        const n = Number(v);
+        if (Number.isFinite(n)) {
+          // solo guardar si tiene valor (no null)
+          out[String(i)] = n;
+        }
+      });
+      return Object.keys(out).length ? out : null;
+    }
+
+    // 🔹 Caso 3: viene como objeto normal
+    if (typeof val === "object") {
+      const out: Record<string, number> = {};
+      for (const [k, v] of Object.entries(val)) {
+        const n = Number(v);
+        if (Number.isFinite(n)) out[k] = n;
+      }
+      return Object.keys(out).length ? out : null;
+    }
+
     return null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
+
 function totalFromStockBySize(map: Record<string, number> | null): number {
   if (!map) return 0;
   return Object.values(map).reduce((a, b) => a + (Number.isFinite(b) ? Number(b) : 0), 0);
@@ -749,13 +780,16 @@ export default function AdminCreateProductPage() {
               <strong>Sizes:</strong>{" "}
               {Array.isArray(created.sizes) ? created.sizes.join(", ") : String(created.sizes || "")}
             </div>
-            {"stockBySize" in created && normalizeStockBySize(created.stockBySize) && (
-              <div>
-                <strong>Stock por talle:</strong>{" "}
-                {Object.entries(normalizeStockBySize(created.stockBySize) as Record<string, number>)
-                  .map(([k, v]) => `${k}:${v}`).join(", ")}
-              </div>
-            )}
+           {"stockBySize" in created && normalizeStockBySize(created.stockBySize) && (
+  <div>
+    <strong>Stock por talle:</strong>{" "}
+    {Object.entries(normalizeStockBySize(created.stockBySize) as Record<string, number>)
+      .filter(([k, v]) => Number.isFinite(v))          // descarta null/NaN
+      .sort(([a], [b]) => Number(a) - Number(b))       // ordena por talle
+      .map(([k, v]) => `${k}:${v}`)
+      .join(", ")}
+  </div>
+)}
             {!!created.images?.length && <div><strong>Imágenes:</strong> {created.images.join(", ")}</div>}
             {"isActive" in created && <div><strong>Activo:</strong> {String(created.isActive)}</div>}
             {"updatedAt" in created && created.updatedAt && <div><strong>Actualizado:</strong> {new Date(created.updatedAt).toLocaleString("es-AR")}</div>}
