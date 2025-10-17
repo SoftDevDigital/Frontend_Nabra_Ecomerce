@@ -37,7 +37,6 @@ const nextConfig: NextConfig = {
 
   // 🚀 OPTIMIZACIONES DE PERFORMANCE
   experimental: {
-    optimizeCss: true,
     optimizePackageImports: ['react-icons', 'lucide-react'],
     turbo: {
       rules: {
