@@ -124,25 +124,31 @@ export default function MediaUploadPage() {
     try {
       const form = new FormData();
       form.append("file", file);
+      form.append("type", type);
 
-      // Si es tipo 'cover', usar el endpoint directo set-cover
-      if (type === "cover") {
-        const r = await apiFetch<UploadResponse>("/media/set-cover", {
-          method: "POST",
-          body: form,
-        });
-        setResult(r);
-        setMsg("Portada subida y activada ✅");
-      } else {
-        // Para productos, usar el endpoint normal
-        form.append("type", type);
-        const r = await apiFetch<UploadResponse>("/media/upload", {
-          method: "POST",
-          body: form,
-        });
-        setResult(r.data);
-        setMsg(r.message || "Archivo subido ✅");
+      const r = await apiFetch<UploadResponse>("/media/upload", {
+        method: "POST",
+        body: form,
+      });
+
+      setResult(r.data);
+      setMsg(r.message || "Archivo subido ✅");
+
+      // 👇 si es cover, la activamos (flujo anterior conservado)
+      if (r.data.type === "cover") {
+        try {
+          const act = await apiFetch<UploadResponse>(`/media/cover-image/${r.data._id}`, {
+            method: "POST",
+          });
+          setResult(act.data); // versión activa con active:true
+          setMsg("Portada cambiada ✅");
+        } catch (err:any) {
+          setMsg("Imagen subida pero no se pudo activar como portada");
+        }
       }
+
+      setResult(r.data);
+      setMsg(r.message || "Archivo subido ✅");
     } catch (err: any) {
       setMsg(err?.message || "No se pudo subir el archivo");
       if (String(err?.message || "").toLowerCase().includes("no autenticado")) {
@@ -153,7 +159,7 @@ export default function MediaUploadPage() {
     }
   }
 
-  /* 🔹🔹🔹 NUEVO: crear media DESDE URL usando el endpoint correcto POST /media/set-cover */
+  /* 🔹🔹🔹 NUEVO: crear media DESDE URL (POST /media/upload con JSON) */
   async function handleUploadByUrl(e: React.FormEvent) {
     e.preventDefault();
     setUrlMsg(null);
@@ -167,17 +173,29 @@ export default function MediaUploadPage() {
 
     setUrlLoading(true);
     try {
-      // Usar el endpoint correcto que maneja tanto archivo como URL
-      const r = await apiFetch<UploadResponse>("/media/set-cover", {
+      const r = await apiFetch<UploadResponse>("/media/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: src }),
+        body: JSON.stringify({ url: src, type: urlType }),
       });
 
-      setUrlCreated(r);
-      setUrlMsg("Portada creada y activada desde URL ✅");
+      setUrlCreated(r.data);
+      setUrlMsg("Imagen creada desde URL ✅");
+
+      // Si fue subida como 'cover', activar inmediatamente (flujo anterior conservado)
+      if (r.data.type === "cover") {
+        try {
+          const act = await apiFetch<UploadResponse>(`/media/cover-image/${r.data._id}`, {
+            method: "POST",
+          });
+          setUrlCreated(act.data);
+          setUrlMsg("Portada creada y activada ✅");
+        } catch (err: any) {
+          setUrlMsg("Imagen creada pero no se pudo activar como portada.");
+        }
+      }
     } catch (err: any) {
-      setUrlMsg(err?.message || "No se pudo crear la portada desde la URL.");
+      setUrlMsg(err?.message || "No se pudo crear la imagen desde la URL.");
       if (String(err?.message || "").toLowerCase().includes("no autenticado")) {
         window.location.href = "/auth?redirectTo=/admin/media";
       }
