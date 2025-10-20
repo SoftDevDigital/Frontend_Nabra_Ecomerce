@@ -154,16 +154,9 @@ function CatalogoPageInner() {
     return { page, limit, category, search, minPrice, maxPrice, sortBy, sortOrder, isFeatured, isPreorder, size };
   }, [sp]);
 
-  /* 🆕 Query para el fetch que NO manda search/category/size al backend (fallback 100% front) */
+  /* Query para el fetch que SÍ manda search/category/size al backend */
   const queryForFetch = useMemo(() => {
-    const q: any = { ...query };
-    if (q.search) q.__localSearch = q.search;
-    delete q.search;
-    if (q.category) q.__localCategory = q.category;
-    delete q.category;
-    if (q.size) q.__localSize = q.size;
-    delete q.size;
-    return q;
+    return { ...query };
   }, [query]);
 
   // Productos
@@ -340,34 +333,9 @@ function CatalogoPageInner() {
   const { products, total, page, totalPages } = data;
   const totalAll = cats.reduce((acc, c) => acc + (c.count || 0), 0);
 
-  /* 🆕 Filtrado en cliente por texto, categoría y talle */
-  const visibleProducts = useMemo(() => {
-    const termText = (searchTerm || "").trim().toLowerCase();
-    const termCat  = (categoryTerm || "").trim().toLowerCase();
-    const termSize = (sizeTerm || "").trim().toLowerCase();
-
-    return data.products.filter((p) => {
-      const matchesText = !termText
-        ? true
-        : [p.name, (p as any).description, p.category].filter(Boolean)
-            .some((v) => String(v).toLowerCase().includes(termText));
-
-      const matchesCat = !termCat
-        ? true
-        : String(p.category || "").toLowerCase().includes(termCat);
-
-      const matchesSize = !termSize
-        ? true
-        : Array.isArray(p.sizes)
-            ? p.sizes.some((sz) => String(sz).toLowerCase().includes(termSize))
-            : false;
-
-      return matchesText && matchesCat && matchesSize;
-    });
-  }, [data.products, searchTerm, categoryTerm, sizeTerm]);
-
-  /* cantidad mostrada considerando todos los filtros en cliente */
-  const shownCount = visibleProducts.length;
+  /* Usar directamente los productos del backend (ya filtrados y paginados) */
+  const visibleProducts = data.products;
+  const shownCount = data.total;
 
   return (
     <main className={s.page}>
@@ -376,7 +344,9 @@ function CatalogoPageInner() {
 
       <header className={s.header}>
         <h1 className={s.title}>Catálogo</h1>
-        <p className={s.subtitle}>{shownCount} resultados</p>
+        <p className={s.subtitle}>
+          {loading ? "Cargando..." : `${visibleProducts.length} de ${shownCount} resultados`}
+        </p>
       </header>
 
       {/* Chips de categorías */}
