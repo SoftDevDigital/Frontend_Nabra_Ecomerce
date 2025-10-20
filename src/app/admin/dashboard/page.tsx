@@ -295,6 +295,9 @@ export default function AdminDashboardPage() {
                   <Link href="/admin/products" className={s.btn} title="Ir a productos/promos">
                     Ver productos y promos
                   </Link>
+                  <Link href="/admin/media" className={s.btn} title="Gestionar medios y portada">
+                    🖼️ Gestionar Medios
+                  </Link>
                 </div>
               </section>
 

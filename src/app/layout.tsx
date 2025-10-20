@@ -90,6 +90,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           side="right"
           offset={16}
         />
+
       </body>
     </html>
   );

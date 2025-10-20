@@ -89,6 +89,13 @@ export default function MediaUploadPage() {
   const [urlMsg, setUrlMsg] = useState<string | null>(null);
   const [urlCreated, setUrlCreated] = useState<MediaDoc | null>(null);
 
+  // ⬇️⬇️⬇️ NUEVO: Estados para alternar entre URL y archivo para portada
+  const [coverInputMode, setCoverInputMode] = useState<"url" | "file">("url");
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverFilePreview, setCoverFilePreview] = useState<string | null>(null);
+  const [coverLoading, setCoverLoading] = useState(false);
+  const [coverMsg, setCoverMsg] = useState<string | null>(null);
+
   /* ⬇️⬇️⬇️ NUEVO: Consultar portada activa (URL) */
   const [activeCoverUrl, setActiveCoverUrl] = useState<string | null>(null);
   const [activeCoverMediaId, setActiveCoverMediaId] = useState<string | null>(null);
@@ -203,6 +210,100 @@ export default function MediaUploadPage() {
       setUrlLoading(false);
     }
   }
+
+  // ⬇️⬇️⬇️ NUEVO: Funciones para la nueva sección de portada
+  const handleCoverModeChange = (mode: "url" | "file") => {
+    setCoverInputMode(mode);
+    setCoverMsg(null);
+    setImageUrl("");
+    setCoverFile(null);
+    setCoverFilePreview(null);
+  };
+
+  const handleCoverFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setCoverFile(file);
+      
+      // Crear preview
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setCoverFilePreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+      
+      setCoverMsg(null);
+    }
+  };
+
+  const handleSetCover = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCoverLoading(true);
+    setCoverMsg(null);
+
+    try {
+      let response: UploadResponse;
+
+      if (coverInputMode === "url") {
+        const src = imageUrl.trim();
+        if (!src) {
+          throw new Error("Por favor ingresa una URL de imagen");
+        }
+
+        // Usar el endpoint set-cover con URL
+        response = await apiFetch<UploadResponse>("/media/set-cover", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: src }),
+        });
+      } else {
+        if (!coverFile) {
+          throw new Error("Por favor selecciona un archivo de imagen");
+        }
+
+        // Validar tipo de archivo
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        if (!allowedTypes.includes(coverFile.type)) {
+          throw new Error("Tipo de archivo no permitido. Solo se permiten JPEG, PNG, GIF y WebP.");
+        }
+
+        // Validar tamaño (25MB)
+        if (coverFile.size > 25 * 1024 * 1024) {
+          throw new Error("El archivo es demasiado grande. Máximo 25MB.");
+        }
+
+        // Crear FormData para archivo
+        const formData = new FormData();
+        formData.append("file", coverFile);
+
+        // Usar el endpoint set-cover con archivo
+        response = await apiFetch<UploadResponse>("/media/set-cover", {
+          method: "POST",
+          body: formData,
+        });
+      }
+
+      setCoverMsg("✅ Imagen de portada actualizada exitosamente");
+      
+      // Recargar la imagen actual
+      await handleGetActiveCover();
+      
+      // Limpiar formulario
+      if (coverInputMode === "url") {
+        setImageUrl("");
+      } else {
+        setCoverFile(null);
+        setCoverFilePreview(null);
+        // Limpiar input file
+        const fileInput = document.getElementById('cover-file-input') as HTMLInputElement;
+        if (fileInput) fileInput.value = '';
+      }
+    } catch (err: any) {
+      setCoverMsg(err.message || "Error al actualizar la imagen de portada");
+    } finally {
+      setCoverLoading(false);
+    }
+  };
 
   // 🔹 AGREGADO: handler para GET /media/:id (ahora con Authorization si hay token)
   async function handleLookup(e: React.FormEvent) {
@@ -920,6 +1021,173 @@ export default function MediaUploadPage() {
           </div>
         )}
       </section>
+
+      {/* ==================== NUEVO: GESTIÓN DE PORTADA MEJORADA ==================== */}
+      {isAdmin && (
+        <section style={{ marginTop: 24 }}>
+          <h2 style={{ fontSize: 18, marginBottom: 8 }}>🖼️ Gestión de Imagen de Portada</h2>
+          
+          <form onSubmit={handleSetCover} style={{
+            padding: "20px",
+            border: "1px solid #e0e0e0",
+            borderRadius: "12px",
+            backgroundColor: "#fff",
+            marginBottom: "20px"
+          }}>
+            {/* Selector de modo */}
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "10px", fontWeight: "600" }}>
+                Método de entrada:
+              </label>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "5px", cursor: "pointer" }}>
+                  <input
+                    type="radio"
+                    name="coverInputMode"
+                    value="url"
+                    checked={coverInputMode === "url"}
+                    onChange={() => handleCoverModeChange("url")}
+                  />
+                  URL de imagen
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: "5px", cursor: "pointer" }}>
+                  <input
+                    type="radio"
+                    name="coverInputMode"
+                    value="file"
+                    checked={coverInputMode === "file"}
+                    onChange={() => handleCoverModeChange("file")}
+                  />
+                  Subir archivo
+                </label>
+              </div>
+            </div>
+
+            {/* Input de URL */}
+            {coverInputMode === "url" && (
+              <div style={{ marginBottom: "20px" }}>
+                <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>
+                  URL de la imagen:
+                </label>
+                <input
+                  type="url"
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  placeholder="https://ejemplo.com/imagen.jpg"
+                  style={{
+                    width: "100%",
+                    padding: "12px",
+                    border: "1px solid #ddd",
+                    borderRadius: "8px",
+                    fontSize: "14px"
+                  }}
+                  disabled={coverLoading}
+                />
+                <p style={{ marginTop: "5px", fontSize: "12px", color: "#666" }}>
+                  Ingresa una URL que apunte a una imagen (JPG, PNG, GIF, WebP)
+                </p>
+              </div>
+            )}
+
+            {/* Input de archivo */}
+            {coverInputMode === "file" && (
+              <div style={{ marginBottom: "20px" }}>
+                <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>
+                  Seleccionar archivo:
+                </label>
+                <input
+                  id="cover-file-input"
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  onChange={handleCoverFileSelect}
+                  style={{
+                    width: "100%",
+                    padding: "12px",
+                    border: "1px solid #ddd",
+                    borderRadius: "8px",
+                    fontSize: "14px"
+                  }}
+                  disabled={coverLoading}
+                />
+                <p style={{ marginTop: "5px", fontSize: "12px", color: "#666" }}>
+                  Formatos permitidos: JPEG, PNG, GIF, WebP (máximo 25MB)
+                </p>
+
+                {/* Preview del archivo */}
+                {coverFilePreview && (
+                  <div style={{ marginTop: "15px" }}>
+                    <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>
+                      Vista previa:
+                    </label>
+                    <img 
+                      src={coverFilePreview} 
+                      alt="Preview" 
+                      style={{ 
+                        maxWidth: "200px", 
+                        maxHeight: "150px", 
+                        borderRadius: "8px",
+                        border: "1px solid #ddd"
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Botón de envío */}
+            <button
+              type="submit"
+              disabled={coverLoading || (coverInputMode === "url" ? !imageUrl.trim() : !coverFile)}
+              style={{
+                padding: "12px 24px",
+                backgroundColor: coverLoading ? "#ccc" : "#007bff",
+                color: "white",
+                border: "none",
+                borderRadius: "8px",
+                fontSize: "16px",
+                fontWeight: "600",
+                cursor: coverLoading ? "not-allowed" : "pointer",
+                width: "100%",
+                marginTop: "10px"
+              }}
+            >
+              {coverLoading ? "Actualizando..." : "Actualizar Imagen de Portada"}
+            </button>
+
+            {/* Mensajes */}
+            {coverMsg && (
+              <div style={{
+                marginTop: "15px",
+                padding: "12px",
+                backgroundColor: coverMsg.includes("✅") ? "#d4edda" : "#f8d7da",
+                border: `1px solid ${coverMsg.includes("✅") ? "#c3e6cb" : "#f5c6cb"}`,
+                borderRadius: "8px",
+                color: coverMsg.includes("✅") ? "#155724" : "#721c24"
+              }}>
+                {coverMsg}
+              </div>
+            )}
+          </form>
+
+          {/* Información adicional */}
+          <div style={{ 
+            padding: "15px", 
+            backgroundColor: "#f8f9fa", 
+            borderRadius: "8px",
+            fontSize: "14px",
+            color: "#666"
+          }}>
+            <h3 style={{ marginBottom: "10px", color: "#333" }}>ℹ️ Información:</h3>
+            <ul style={{ margin: 0, paddingLeft: "20px" }}>
+              <li>La imagen de portada se mostrará en la página principal del sitio</li>
+              <li>Al subir una nueva imagen, la anterior se desactivará automáticamente</li>
+              <li>Se recomienda usar imágenes con buena resolución (mínimo 1200x600px)</li>
+              <li>Los formatos soportados son: JPEG, PNG, GIF y WebP</li>
+              <li>Tamaño máximo: 25MB</li>
+            </ul>
+          </div>
+        </section>
+      )}
 
       {/* ==================== NUEVO: BOTÓN PARA CONSULTAR PORTADA ACTIVA (flujo viejo) ==================== */}
       <section style={{ marginTop: 24 }}>
