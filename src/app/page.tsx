@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import styles from "./page.module.css";
 import HeroOptimized from "./components/Hero/HeroOptimized";
-import Featured from "./components/Featured/Featured";
+import LazyFeatured from "./components/Lazy/LazyFeatured";
 import Footer from "./components/Footer/Footer";
 // import StructuredData from "./components/SEO/StructuredData";
 // import { generateMetadata, generateStructuredData } from "@/lib/seo";
@@ -44,7 +44,7 @@ export default function Home() {
         </div>
       </div>
 
-      <Featured />
+      <LazyFeatured />
 
       {/* ⬇️ Footer nuevo */}
       <Footer />
