@@ -6,7 +6,7 @@ import Image from "next/image";
 async function getCoverImageUrl(): Promise<string> {
   try {
     const base = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3001";
-    const response = await fetch(`${base}/media/cover-image/active/url`, { 
+    const response = await fetch(`${base}/media/cover/active`, { 
       cache: "force-cache",
       next: { revalidate: 300 } // 5 minutos
     });

@@ -425,7 +425,7 @@ export default function MediaUploadPage() {
           method: "POST",
         });
       } else {
-        await apiFetch<UploadResponse>(`/media/cover-image/active/deactivate`, {
+        await apiFetch<UploadResponse>(`/media/cover/active/deactivate`, {
           method: "POST",
         });
       }
@@ -451,14 +451,14 @@ export default function MediaUploadPage() {
     }
   }
 
-  /* 🔹🔹🔹 NUEVO: GET /media/cover-image/active/url — flujo viejo */
+  /* 🔹🔹🔹 NUEVO: GET /media/cover/active — flujo actual */
   async function handleGetActiveCover() {
     setActiveMsg(null);
     setActiveCoverUrl(null);
     setActiveCoverMediaId(null);
     setActiveLoading(true);
     try {
-      const res = await apiFetch<any>("/media/cover-image/active/url", { method: "GET" });
+      const res = await apiFetch<any>("/media/cover/active", { method: "GET" });
       // Soportar distintos formatos: string o { url, mediaId } o { data: ... }
       const data = (res as any)?.data ?? res;
       let url: string | null = null;
@@ -1191,7 +1191,7 @@ export default function MediaUploadPage() {
 
       {/* ==================== NUEVO: BOTÓN PARA CONSULTAR PORTADA ACTIVA (flujo viejo) ==================== */}
       <section style={{ marginTop: 24 }}>
-        <h2 style={{ fontSize: 18, marginBottom: 8 }}>Portada activa (GET /media/cover-image/active/url)</h2>
+        <h2 style={{ fontSize: 18, marginBottom: 8 }}>Portada activa (GET /media/cover/active)</h2>
         <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
           <button
             type="button"

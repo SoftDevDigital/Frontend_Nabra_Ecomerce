@@ -32,7 +32,7 @@ export default async function Hero() {
 
   try {
     // Solo intentar fetch si la API está disponible
-    const resp = await getJSON(`${base}/media/cover-image/active/url`);
+    const resp = await getJSON(`${base}/media/cover/active`);
     if (resp) {
       const data = (resp as any).data ?? resp;
       remoteCoverUrl = typeof data === "string" ? data : data?.url ?? null;
