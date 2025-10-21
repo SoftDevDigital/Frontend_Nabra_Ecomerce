@@ -6,9 +6,14 @@ import Image from "next/image";
 async function getCoverImageUrl(): Promise<string> {
   try {
     const base = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3001";
+    // 🚀 FIX: Eliminar caché agresivo para actualizaciones inmediatas
     const response = await fetch(`${base}/media/cover/active`, { 
-      cache: "force-cache",
-      next: { revalidate: 300 } // 5 minutos
+      cache: "no-store", // No cachear para obtener siempre la imagen más reciente
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
     });
     
     if (!response.ok) {
@@ -19,7 +24,9 @@ async function getCoverImageUrl(): Promise<string> {
     const url = data?.url || data?.data?.url;
     
     if (url && typeof url === "string") {
-      return url;
+      // 🚀 FIX: Agregar cache busting con timestamp
+      const separator = url.includes('?') ? '&' : '?';
+      return `${url}${separator}v=${Date.now()}`;
     }
     
     throw new Error("URL de imagen no válida");

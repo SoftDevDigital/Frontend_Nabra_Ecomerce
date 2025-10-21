@@ -79,3 +79,4 @@ echo "✅ Deploy preparado exitosamente!"
 echo "📊 Versión: $(cat $VERSION_FILE)"
 echo "🕒 Timestamp: $TIMESTAMP"
 
+
