@@ -1,0 +1,47 @@
+.bar{
+  width: 100%;
+}
+.inner{
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 8px 14px;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+}
+.text{
+  font-weight: 800;
+  letter-spacing: .2px;
+}
+.link{
+  color: currentColor;
+  text-decoration: underline;
+  font-weight: 700;
+}
+.close{
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: currentColor;
+  font-size: 18px;
+  line-height: 1;
+  font-weight: 900;
+  padding: 4px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.close:hover{
+  background: rgba(255,255,255,.12);
+}
+
+/* Mobile: una sola línea/stack si no entra */
+@media (max-width: 520px){
+  .inner{
+    grid-template-columns: 1fr auto;
+    row-gap: 6px;
+  }
+  .link{
+    justify-self: start;
+  }
+}

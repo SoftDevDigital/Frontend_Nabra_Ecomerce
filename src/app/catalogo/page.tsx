@@ -126,6 +126,10 @@ function CatalogoPageInner() {
   // ✨ NUEVO: hook fly + portal
   const { fly, Portal } = useFlyToCart();
 
+  // 🔻 NEW: toolbar mobile (estado de paneles)
+  const [openFilters, setOpenFilters] = useState(false);
+  const [openSort, setOpenSort] = useState(false);
+
   // Mantener inputs sincronizados si cambian los params (back/forward)
   useEffect(() => {
     const currentSearch = sp.get("search") ?? "";
@@ -349,6 +353,150 @@ function CatalogoPageInner() {
         </p>
       </header>
 
+      {/* 🔻 NEW: Toolbar mobile (botones Filtros / Ordenar) */}
+      <section className={s.mobileToolbar}>
+        <button
+          type="button"
+          className={s.toolbarBtn}
+          onClick={() => { setOpenFilters(v => !v); setOpenSort(false); }}
+          aria-expanded={openFilters}
+        >
+          Filtros <span className={s.chev} aria-hidden>▾</span>
+        </button>
+        <button
+          type="button"
+          className={s.toolbarBtn}
+          onClick={() => { setOpenSort(v => !v); setOpenFilters(false); }}
+          aria-expanded={openSort}
+        >
+          Ordenar por <span className={s.chev} aria-hidden>▾</span>
+        </button>
+      </section>
+
+      {/* 🔻 NEW: Panel de Filtros (mobile) */}
+      {openFilters && (
+        <section className={s.mobilePanel}>
+          <div className={s.searchWrap}>
+            <input
+              className={`${s.input} ${s.searchInput}`}
+              placeholder="Buscar…"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            {!!searchTerm && (
+              <button
+                type="button"
+                aria-label="Limpiar búsqueda"
+                className={s.clearBtn}
+                onClick={() => setSearchTerm("")}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          <input
+            className={s.input}
+            placeholder="Categoría (sandalias…)"
+            value={categoryTerm}
+            onChange={(e) => setCategoryTerm(e.target.value)}
+          />
+
+          <input
+            className={s.input}
+            placeholder="Talle (38, 40…)"
+            value={sizeTerm}
+            onChange={(e) => setSizeTerm(e.target.value)}
+          />
+
+          <div className={s.mobileGrid2}>
+            <input
+              className={s.input}
+              type="number"
+              placeholder="Precio mín."
+              defaultValue={sp.get("minPrice") ?? ""}
+              onBlur={(e) => setParam("minPrice", e.target.value)}
+            />
+            <input
+              className={s.input}
+              type="number"
+              placeholder="Precio máx."
+              defaultValue={sp.get("maxPrice") ?? ""}
+              onBlur={(e) => setParam("maxPrice", e.target.value)}
+            />
+          </div>
+
+          <label className={s.check}>
+            <input
+              type="checkbox"
+              defaultChecked={sp.get("isFeatured") === "true"}
+              onChange={(e) => setParam("isFeatured", e.target.checked ? "true" : undefined)}
+            />
+            Destacados
+          </label>
+
+          <label className={s.check}>
+            <input
+              type="checkbox"
+              defaultChecked={sp.get("isPreorder") === "true"}
+              onChange={(e) => setParam("isPreorder", e.target.checked ? "true" : undefined)}
+            />
+            Preventa
+          </label>
+
+          <button
+            type="button"
+            className={`${s.btn} ${s.btnPrimary} ${s.fullW}`}
+            onClick={() => setOpenFilters(false)}
+          >
+            Aplicar
+          </button>
+        </section>
+      )}
+
+      {/* 🔻 NEW: Panel de Orden (mobile) */}
+      {openSort && (
+        <section className={s.mobilePanel}>
+          <select
+            className={s.select}
+            defaultValue={sp.get("sortBy") ?? ""}
+            onChange={(e) => setParam("sortBy", e.target.value || undefined)}
+          >
+            <option value="">Ordenar por…</option>
+            <option value="price">Precio</option>
+            <option value="name">Nombre</option>
+            <option value="createdAt">Recientes</option>
+            <option value="relevance">Relevancia</option>
+          </select>
+
+          <select
+            className={s.select}
+            defaultValue={sp.get("sortOrder") ?? "asc"}
+            onChange={(e) => setParam("sortOrder", e.target.value)}
+          >
+            <option value="asc">Asc</option>
+            <option value="desc">Desc</option>
+          </select>
+
+          <select
+            className={s.select}
+            defaultValue={sp.get("limit") ?? "12"}
+            onChange={(e) => setParam("limit", e.target.value)}
+            title="Items por página"
+          >
+            {[12, 24, 36, 48].map(n => <option key={n} value={n}>{n} / pág.</option>)}
+          </select>
+
+          <button
+            type="button"
+            className={`${s.btn} ${s.btnPrimary} ${s.fullW}`}
+            onClick={() => setOpenSort(false)}
+          >
+            Aplicar
+          </button>
+        </section>
+      )}
+
       {/* Chips de categorías */}
       <section className={s.chips}>
         <button
@@ -379,7 +527,7 @@ function CatalogoPageInner() {
 
       {/* Stats de categoría seleccionada */}
       {sp.get("category") && (
-        <section className={s.statsCard}>
+  <section className={`${s.statsCard} ${s.hideCatStats}`}>
           {catStatsLoading && <p className={s.m0}>Cargando estadísticas…</p>}
           {!catStatsLoading && catStatsErr && <p className={`${s.m0} ${s.error}`}>{catStatsErr}</p>}
           {!catStatsLoading && !catStatsErr && catStats && (
@@ -577,7 +725,7 @@ function CatalogoPageInner() {
                           onChange={(e) => setSizeById((st) => ({ ...st, [p._id]: e.target.value }))}
                           className={s.inlineSelect}
                         >
-                          <option value="">Elegí un talle</option>
+                          <option value="">Elige una talla</option>
                           {p.sizes!.map((sz) => (
                             <option key={sz} value={sz}>{sz}</option>
                           ))}
@@ -587,7 +735,13 @@ function CatalogoPageInner() {
                   )}
 
                   <div className={s.cardActions}>
-                    <a href={`/producto/${p._id}`} className={s.btn}>Ver detalle</a>
+                    <a
+                      href={`/producto/${p._id}`}
+                      className={`${s.btn} ${s.btnPrimary}`}  // ⬅️ ahora igual al “Agregar”
+                    >
+                      Ver detalle
+                    </a>
+
                     <button
                       onClick={() => handleQuickAdd(p)}
                       disabled={addingId === p._id || (needsSizeSelection && !(sizeById[p._id] || "").trim())}
