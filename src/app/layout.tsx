@@ -30,6 +30,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="apple-mobile-web-app-title" content="NABRA" />
         <link rel="apple-touch-icon" href="/logoNabra.png" />
         <link rel="manifest" href="/manifest.json" />
+        
+        {/* Cache Busting Meta Tags */}
+        <meta httpEquiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+        <meta httpEquiv="Pragma" content="no-cache" />
+        <meta httpEquiv="Expires" content="0" />
       </head>
       <body>
         {/* Script de monitoreo simple */}

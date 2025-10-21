@@ -4,13 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
-    "build:analyze": "ANALYZE=true next build",
+    "build": "node scripts/generate-version.js && next build",
+    "build:analyze": "node scripts/generate-version.js && ANALYZE=true next build",
     "start": "next start",
     "lint": "eslint",
     "lint:fix": "eslint --fix",
     "type-check": "tsc --noEmit",
-    "preview": "next build && next start"
+    "preview": "node scripts/generate-version.js && next build && next start",
+    "generate-version": "node scripts/generate-version.js"
   },
   "dependencies": {
     "react": "19.1.0",
