@@ -230,7 +230,7 @@ export const DEFAULT_SEO = {
     "calzado de calidad",
     "zapatos trendy",
   ],
-  image: "/zapateria.jpeg",
+  image: "/logoNabra.png",
   url: "/",
 };
 

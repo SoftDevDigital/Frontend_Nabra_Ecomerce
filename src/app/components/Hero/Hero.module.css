@@ -1,4 +1,4 @@
-/* 🚀 OPTIMIZACIÓN: Imagen de fondo con fallback inmediato */
+/* 🚀 OPTIMIZACIÓN: Sin imagen de fallback, solo la imagen real */
 .hero{
   position: relative;
   min-height: clamp(420px, 62vh, 680px);
@@ -7,18 +7,14 @@
   isolation: isolate;
   overflow: hidden;
 
-  /* Imagen de fallback inmediata - SIEMPRE visible */
-  background-image: url("/zapateria.jpeg");
+  /* Solo imagen dinámica, sin fallback */
+  background-image: var(--hero-bg);
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
   background-attachment: scroll;
   
-  /* Imagen dinámica si está disponible (sobrescribe la anterior) */
-  background-image: var(--hero-bg, url("/zapateria.jpeg"));
-  
-  /* Asegurar que la imagen se muestre inmediatamente */
-  background-color: #f0f0f0; /* Color de fondo mientras carga */
+  /* Sin color de fondo mientras carga */
 }
 
 .overlay{

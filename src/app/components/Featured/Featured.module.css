@@ -61,7 +61,7 @@
 .imgBox{
   width: 100%;
   aspect-ratio: 1 / 1;
-  background: #f4f4f4;
+  /* Sin fondo para evitar mostrar color mientras carga */
 }
 
 .img{

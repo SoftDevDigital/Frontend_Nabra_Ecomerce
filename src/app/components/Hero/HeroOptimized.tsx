@@ -31,8 +31,8 @@ async function getCoverImageUrl(): Promise<string> {
     
     throw new Error("URL de imagen no válida");
   } catch (error) {
-    console.warn("Error al obtener imagen de portada, usando imagen por defecto:", error);
-    return "/zapateria.jpeg"; // Fallback a imagen local
+    console.warn("Error al obtener imagen de portada:", error);
+    return null; // No usar imagen por defecto
   }
 }
 
@@ -40,29 +40,31 @@ export default async function HeroOptimized() {
   // 🚀 OPTIMIZACIÓN: Obtener imagen de portada dinámicamente
   const heroImage = await getCoverImageUrl();
   
-  // Estilos con imagen de fallback inmediata
-  const styleVar = {
+  // Solo aplicar estilos si hay imagen válida
+  const styleVar = heroImage ? {
     ["--hero-bg" as any]: `url(${heroImage})`,
-  } as CSSProperties;
+  } as CSSProperties : {};
 
   return (
     <section className={styles.hero} aria-label="Hero principal" style={styleVar}>
-      {/* Imagen de preload invisible para garantizar carga */}
-      <Image 
-        src={heroImage} 
-        alt="NABRA - Calzado de calidad" 
-        priority={true}
-        fill
-        style={{ 
-          position: 'absolute', 
-          top: 0, 
-          left: 0, 
-          width: '100%', 
-          height: '100%', 
-          zIndex: -2,
-          objectFit: 'cover'
-        }}
-      />
+      {/* Solo mostrar imagen si existe */}
+      {heroImage && (
+        <Image 
+          src={heroImage} 
+          alt="NABRA - Calzado de calidad" 
+          priority={true}
+          fill
+          style={{ 
+            position: 'absolute', 
+            top: 0, 
+            left: 0, 
+            width: '100%', 
+            height: '100%', 
+            zIndex: -2,
+            objectFit: 'cover'
+          }}
+        />
+      )}
       
       <div className={styles.overlay} />
       <div className={styles.content}>

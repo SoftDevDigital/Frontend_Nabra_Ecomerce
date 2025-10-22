@@ -21,7 +21,7 @@ const HOME_SEO = {
     "zapatos México",
     "calzado premium"
   ],
-  image: "/zapateria.jpeg",
+  image: "/logoNabra.png",
   url: "/",
   type: "website" as const,
 };

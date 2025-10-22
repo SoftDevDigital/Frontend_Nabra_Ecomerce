@@ -17,7 +17,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="es">
       <head>
         {/* 🚀 PRELOAD DE IMÁGENES CRÍTICAS */}
-        <link rel="preload" href="/zapateria.jpeg" as="image" />
         <link rel="preload" href="/logoNabra.png" as="image" />
         
         <link rel="preconnect" href="https://fonts.googleapis.com" />

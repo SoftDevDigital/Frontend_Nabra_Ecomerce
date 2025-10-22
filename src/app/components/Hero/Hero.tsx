@@ -24,7 +24,7 @@ async function getJSON(url: string) {
 
 export default async function Hero() {
   // 🚀 OPTIMIZACIÓN: Usar imagen local por defecto para carga inmediata
-  const localFallback = "/zapateria.jpeg";
+  const localFallback = null; // No usar imagen por defecto
   
   // Siempre usar la imagen local primero para carga inmediata
   const styleVar = {
