@@ -37,7 +37,7 @@ export function middleware(request: NextRequest) {
 
   // Preload de recursos críticos
   if (request.nextUrl.pathname === '/') {
-    response.headers.set('Link', '</logoNabra.png>; rel=preload; as=image, </zapateria.jpeg>; rel=preload; as=image');
+    response.headers.set('Link', '</logoNabra.png>; rel=preload; as=image');
   }
 
   // Compresión

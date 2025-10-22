@@ -8,7 +8,6 @@ export default function ImageOptimizer() {
     const preloadCriticalImages = () => {
       const criticalImages = [
         '/logoNabra.png',
-        '/zapateria.jpeg',
       ];
 
       criticalImages.forEach(src => {

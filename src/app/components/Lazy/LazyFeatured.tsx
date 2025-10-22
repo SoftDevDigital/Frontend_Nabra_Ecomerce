@@ -22,7 +22,7 @@ const Featured = dynamic(() => import("../Featured/Featured"), {
 
 export default function LazyFeatured() {
   return (
-    <LazyWrapper delay={100}>
+    <LazyWrapper>
       <Featured />
     </LazyWrapper>
   );

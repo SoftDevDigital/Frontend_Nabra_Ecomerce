@@ -102,10 +102,10 @@ function normalizeTotals(payload: any, listLen: number) {
 export async function fetchProducts(q: ProductsQuery = {}, init?: RequestInit): Promise<ProductsResponse> {
   const url = buildProductsUrl(q);
   
-  // 🚀 OPTIMIZACIÓN: Usar caché inteligente basado en el tipo de consulta
+  // 🚀 OPTIMIZACIÓN: Usar caché menos agresivo para evitar datos obsoletos
   const cacheStrategy = q.isFeatured 
-    ? { cache: "force-cache", next: { revalidate: 300 } } // 5 min para destacados
-    : { cache: "force-cache", next: { revalidate: 60 } }; // 1 min para otros
+    ? { cache: "no-store" } // Sin caché para destacados (siempre datos frescos)
+    : { cache: "force-cache", next: { revalidate: 30 } }; // 30 segundos para otros
   
   const res = await fetch(url, { ...cacheStrategy, ...init });
   const text = await res.text();

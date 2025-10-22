@@ -64,19 +64,11 @@ export default function OptimizedImage({
     : undefined);
 
   if (hasError) {
-    return (
-      <div 
-        className={`bg-gray-100 flex items-center justify-center ${className}`}
-        style={{ width, height, ...style }}
-        {...dataAttributes}
-      >
-        <span className="text-gray-400 text-sm">Error al cargar imagen</span>
-      </div>
-    );
+    return null; // No mostrar nada si hay error
   }
 
   return (
-    <div className={`relative ${isLoading ? 'animate-pulse' : ''} ${className}`} style={style}>
+    <div className={`relative ${className}`} style={style}>
       <Image
         src={src}
         alt={alt}
@@ -86,11 +78,11 @@ export default function OptimizedImage({
         priority={priority}
         sizes={sizes}
         quality={quality}
-        placeholder={placeholder}
+        placeholder="empty"
         blurDataURL={finalBlurDataURL}
         onLoad={handleLoad}
         onError={handleError}
-        className={`transition-opacity duration-300 ${
+        className={`transition-opacity duration-100 ${
           isLoading ? 'opacity-0' : 'opacity-100'
         }`}
         style={{
@@ -99,9 +91,7 @@ export default function OptimizedImage({
         }}
         {...dataAttributes}
       />
-      {isLoading && (
-        <div className="absolute inset-0 bg-gray-200 animate-pulse rounded" />
-      )}
+      {/* No mostrar loading state, solo la imagen cuando esté lista */}
     </div>
   );
 }

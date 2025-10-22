@@ -5,9 +5,14 @@ import OptimizedImage from "../UI/OptimizedImage";
 
 async function getJSON(url: string) {
   try {
+    // 🚀 FIX: Eliminar caché agresivo para actualizaciones inmediatas
     const res = await fetch(url, { 
-      cache: "force-cache",
-      next: { revalidate: 300 } // 5 minutos
+      cache: "no-store", // No cachear para obtener siempre la imagen más reciente
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok || json?.success === false) return null;
@@ -19,7 +24,7 @@ async function getJSON(url: string) {
 
 export default async function Hero() {
   // 🚀 OPTIMIZACIÓN: Usar imagen local por defecto para carga inmediata
-  const localFallback = "/zapateria.jpeg";
+  const localFallback = null; // No usar imagen por defecto
   
   // Siempre usar la imagen local primero para carga inmediata
   const styleVar = {
@@ -35,7 +40,13 @@ export default async function Hero() {
     const resp = await getJSON(`${base}/media/cover/active`);
     if (resp) {
       const data = (resp as any).data ?? resp;
-      remoteCoverUrl = typeof data === "string" ? data : data?.url ?? null;
+      const baseUrl = typeof data === "string" ? data : data?.url ?? null;
+      
+      // 🚀 FIX: Agregar cache busting con timestamp
+      if (baseUrl && typeof baseUrl === "string") {
+        const separator = baseUrl.includes('?') ? '&' : '?';
+        remoteCoverUrl = `${baseUrl}${separator}v=${Date.now()}`;
+      }
     }
   } catch {
     // Si falla, usar imagen local (ya está configurada)

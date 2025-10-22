@@ -183,10 +183,14 @@ function CatalogoPageInner() {
                 if (urls[0]) return [p._id, urls[0]] as const;
               } catch { /* ignore */ }
             }
-            return [p._id, "/product-placeholder.jpg"] as const;
+            // No mostrar imagen placeholder, solo productos con imágenes reales
+            return null;
           })
         );
-        if (!abort) setThumbs(Object.fromEntries(entries));
+        
+        // Filtrar solo los productos que tienen imágenes válidas
+        const validEntries = entries.filter((entry): entry is [string, string] => entry !== null);
+        if (!abort) setThumbs(Object.fromEntries(validEntries));
       } catch (e: any) {
         if (!abort) setErr(e?.message || "Error al cargar productos");
       } finally {
@@ -678,19 +682,21 @@ function CatalogoPageInner() {
       {!loading && !err && (
         <>
           <div className={s.grid}>
-            {visibleProducts.map(p => {
-              const needsSizeSelection = Array.isArray(p.sizes) && p.sizes.length > 1;
-              const isOff = hasDiscount(p);
-              const base = basePrice(p);
-              const show = displayPrice(p);
-              const off = discountPercent(p);
+            {visibleProducts
+              .filter(p => thumbs[p._id]) // Solo mostrar productos con imágenes válidas
+              .map(p => {
+                const needsSizeSelection = Array.isArray(p.sizes) && p.sizes.length > 1;
+                const isOff = hasDiscount(p);
+                const base = basePrice(p);
+                const show = displayPrice(p);
+                const off = discountPercent(p);
 
-              return (
-                <article key={p._id} className={s.card}>
-                  <a href={`/producto/${p._id}`} aria-label={p.name} className={s.thumbLink}>
-                    <div className={s.thumbBox}>
-                      <img
-                        src={thumbs[p._id] || "/product-placeholder.jpg"}
+                return (
+                  <article key={p._id} className={s.card}>
+                    <a href={`/producto/${p._id}`} aria-label={p.name} className={s.thumbLink}>
+                      <div className={s.thumbBox}>
+                        <img
+                          src={thumbs[p._id]} // Ya sabemos que existe por el filter
                         alt={p.name}
                         className={s.thumbImg}
                         loading="lazy"

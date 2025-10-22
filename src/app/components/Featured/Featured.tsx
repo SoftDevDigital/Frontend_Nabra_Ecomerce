@@ -136,11 +136,15 @@ export default function Featured() {
               /* ignore */
             }
           }
-          return [p._id, "/product-placeholder.jpg"] as const;
+          // No mostrar imagen placeholder, solo productos con imágenes reales
+          return null;
         })
       );
 
-      setThumbs(Object.fromEntries(entries));
+      // Filtrar solo los productos que tienen imágenes válidas
+      const validEntries = entries.filter((entry): entry is [string, string] => entry !== null);
+
+      setThumbs(Object.fromEntries(validEntries));
     } catch (e: any) {
       setErr(e?.message || "Error al cargar destacados");
       setItems([]);
@@ -255,10 +259,12 @@ export default function Featured() {
       {!loading && !err && items.length > 0 && (
         <>
           <div className={styles.grid}>
-            {items.map((p) => {
-              const img = thumbs[p._id] || "/product-placeholder.jpg";
-              const needsSizeSelection = Array.isArray(p.sizes) && p.sizes.length > 1;
-              const noStock = typeof p.stock === "number" && p.stock <= 0;
+            {items
+              .filter((p) => thumbs[p._id]) // Solo mostrar productos con imágenes válidas
+              .map((p) => {
+                const img = thumbs[p._id]; // Ya sabemos que existe por el filter
+                const needsSizeSelection = Array.isArray(p.sizes) && p.sizes.length > 1;
+                const noStock = typeof p.stock === "number" && p.stock <= 0;
               return (
                 <article key={p._id} className={styles.card}>
                   <Link href={`/producto/${p._id}`} className={styles.imgLink} aria-label={p.name}>

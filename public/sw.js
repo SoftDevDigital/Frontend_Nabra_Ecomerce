@@ -170,3 +170,4 @@ setInterval(checkForUpdates, VERSION_CHECK_INTERVAL);
 
 console.log('🎯 Service Worker cargado y funcionando');
 
+

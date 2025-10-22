@@ -288,6 +288,25 @@ export default function MediaUploadPage() {
       // Recargar la imagen actual
       await handleGetActiveCover();
       
+      // 🚀 FIX: Invalidar caché del navegador para forzar actualización
+      try {
+        // Limpiar caché del navegador para la imagen de portada
+        if ('caches' in window) {
+          const cacheNames = await caches.keys();
+          await Promise.all(
+            cacheNames.map(cacheName => caches.delete(cacheName))
+          );
+        }
+        
+        // Forzar recarga de la página principal en una nueva pestaña para verificar
+        setTimeout(() => {
+          setCoverMsg("✅ Imagen actualizada. Abriendo página principal en nueva pestaña para verificar...");
+          window.open('/', '_blank');
+        }, 1500);
+      } catch (error) {
+        console.warn("No se pudo limpiar el caché:", error);
+      }
+      
       // Limpiar formulario
       if (coverInputMode === "url") {
         setImageUrl("");
@@ -458,7 +477,16 @@ export default function MediaUploadPage() {
     setActiveCoverMediaId(null);
     setActiveLoading(true);
     try {
-      const res = await apiFetch<any>("/media/cover/active", { method: "GET" });
+      // 🚀 FIX: Forzar invalidación de caché para obtener datos frescos
+      const res = await apiFetch<any>("/media/cover/active", { 
+        method: "GET",
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      });
+      
       // Soportar distintos formatos: string o { url, mediaId } o { data: ... }
       const data = (res as any)?.data ?? res;
       let url: string | null = null;
@@ -472,7 +500,12 @@ export default function MediaUploadPage() {
       }
 
       if (!url) throw new Error("No se encontró portada activa.");
-      setActiveCoverUrl(url);
+      
+      // 🚀 FIX: Agregar cache busting para evitar caché del navegador
+      const separator = url.includes('?') ? '&' : '?';
+      const urlWithCacheBust = `${url}${separator}v=${Date.now()}`;
+      
+      setActiveCoverUrl(urlWithCacheBust);
       if (mid) setActiveCoverMediaId(mid);
       setActiveMsg("Portada activa encontrada ✅");
     } catch (err: any) {

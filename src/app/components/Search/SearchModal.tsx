@@ -165,7 +165,7 @@ export default function SearchModal({ open, onClose }: Props) {
 
   function firstImg(p: Product) {
     const cand = p.imageUrl || p.coverUrl || p.images?.[0] || "";
-    return absolutize(cand) || "/product-placeholder.jpg";
+    return absolutize(cand) || null; // No mostrar placeholder
   }
 
   function handlePick(p: Product) {
@@ -218,20 +218,28 @@ export default function SearchModal({ open, onClose }: Props) {
                 </button>
               </header>
               <div className={styles.grid}>
-                {recent.map((p) => (
-                  <Link
-                    key={`r-${p._id}`}
-                    href={`/producto/${p._id}`}
-                    className={styles.card}
-                    onClick={() => handlePick(p)}
-                  >
-                    <div className={styles.thumbBox}>
-                      <img src={absolutize(p.imageUrl) || firstImg(p)} alt={p.name} />
-                    </div>
-                    <div className={styles.cardName} title={p.name}>{p.name}</div>
-                    {typeof p.price === "number" && <div className={styles.cardPrice}>{money(p.price)}</div>}
-                  </Link>
-                ))}
+                {recent
+                  .filter(p => absolutize(p.imageUrl) || firstImg(p)) // Solo productos con imágenes válidas
+                  .map((p) => {
+                    const imgSrc = absolutize(p.imageUrl) || firstImg(p);
+                    if (!imgSrc) return null; // No mostrar si no hay imagen
+                    
+                    return (
+                      <Link
+                        key={`r-${p._id}`}
+                        href={`/producto/${p._id}`}
+                        className={styles.card}
+                        onClick={() => handlePick(p)}
+                      >
+                        <div className={styles.thumbBox}>
+                          <img src={imgSrc} alt={p.name} />
+                        </div>
+                        <div className={styles.cardName} title={p.name}>{p.name}</div>
+                        {typeof p.price === "number" && <div className={styles.cardPrice}>{money(p.price)}</div>}
+                      </Link>
+                    );
+                  })
+                  .filter(Boolean)}
               </div>
             </section>
           )}
@@ -253,20 +261,28 @@ export default function SearchModal({ open, onClose }: Props) {
 
             {!loading && !err && results.length > 0 && (
               <div className={styles.grid}>
-                {results.map((p) => (
-                  <Link
-                    key={p._id}
-                    href={`/producto/${p._id}`}
-                    className={styles.card}
-                    onClick={() => handlePick(p)}
-                  >
-                    <div className={styles.thumbBox}>
-                      <img src={firstImg(p)} alt={p.name} />
-                    </div>
-                    <div className={styles.cardName} title={p.name}>{p.name}</div>
-                    {typeof p.price === "number" && <div className={styles.cardPrice}>{money(p.price)}</div>}
-                  </Link>
-                ))}
+                {results
+                  .filter(p => firstImg(p)) // Solo productos con imágenes válidas
+                  .map((p) => {
+                    const imgSrc = firstImg(p);
+                    if (!imgSrc) return null; // No mostrar si no hay imagen
+                    
+                    return (
+                      <Link
+                        key={p._id}
+                        href={`/producto/${p._id}`}
+                        className={styles.card}
+                        onClick={() => handlePick(p)}
+                      >
+                        <div className={styles.thumbBox}>
+                          <img src={imgSrc} alt={p.name} />
+                        </div>
+                        <div className={styles.cardName} title={p.name}>{p.name}</div>
+                        {typeof p.price === "number" && <div className={styles.cardPrice}>{money(p.price)}</div>}
+                      </Link>
+                    );
+                  })
+                  .filter(Boolean)}
               </div>
             )}
           </section>
