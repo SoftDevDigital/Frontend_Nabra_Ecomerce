@@ -51,13 +51,18 @@ export default function PreordersPage() {
         list.map(async (p) => {
           try {
             const urls = await resolveImageUrls(p.images ?? []);
-            return [p._id, urls[0] || "/product-placeholder.jpg"] as const;
+            if (urls[0]) return [p._id, urls[0]] as const;
           } catch {
-            return [p._id, "/product-placeholder.jpg"] as const;
+            /* ignore */
           }
+          // No mostrar imagen placeholder, solo productos con imágenes reales
+          return null;
         })
       );
-      setThumbs(Object.fromEntries(entries));
+      
+      // Filtrar solo los productos que tienen imágenes válidas
+      const validEntries = entries.filter((entry): entry is [string, string] => entry !== null);
+      setThumbs(Object.fromEntries(validEntries));
     } catch (e: any) {
       setErr(e?.message || "Error al cargar la preventa");
       setItems([]);
@@ -103,18 +108,20 @@ export default function PreordersPage() {
       {/* Listado */}
       {!loading && !err && items.length > 0 && (
         <section className={s.grid}>
-          {items.map((p) => {
-            const stock = typeof p.stock === "number" ? Math.max(0, p.stock) : undefined;
-            // Simulá progreso si tu API no lo trae: menor stock = más “avanzado”
-            const progress = stock !== undefined ? Math.min(100, Math.max(0, 100 - stock)) : undefined;
+          {items
+            .filter(p => thumbs[p._id]) // Solo mostrar productos con imágenes válidas
+            .map((p) => {
+              const stock = typeof p.stock === "number" ? Math.max(0, p.stock) : undefined;
+              // Simulá progreso si tu API no lo trae: menor stock = más "avanzado"
+              const progress = stock !== undefined ? Math.min(100, Math.max(0, 100 - stock)) : undefined;
 
-            return (
-              <article key={p._id} className={s.card}>
-                {/* Imagen */}
-                <a href={`/producto/${p._id}`} className={s.thumbLink} aria-label={p.name}>
-                  <div className={s.thumbBox}>
-                    <img
-                      src={thumbs[p._id] || "/product-placeholder.jpg"}
+              return (
+                <article key={p._id} className={s.card}>
+                  {/* Imagen */}
+                  <a href={`/producto/${p._id}`} className={s.thumbLink} aria-label={p.name}>
+                    <div className={s.thumbBox}>
+                      <img
+                        src={thumbs[p._id]} // Ya sabemos que existe por el filter
                       alt={p.name}
                       className={s.thumbImg}
                       loading="lazy"
