@@ -704,13 +704,6 @@ export default function AdminCreateProductPage() {
               </small>
             </label>
 
-            {/* CSV fallback */}
-            <label className={s.field}>
-              <span className={s.lbl}>Imágenes (CSV, opcional)</span>
-              <input value={imagesText} onChange={(e) => setImagesText(e.target.value)} placeholder="url1,url2 o ids" className={s.input}/>
-              <small className={s.help}>Si no adjuntás archivos, se toma este CSV (IDs/URLs existentes).</small>
-            </label>
-
             <div className={s.switchRow}>
               <label className={s.switch}><input type="checkbox" checked={isPreorder} onChange={(e) => setIsPreorder(e.target.checked)}/><span>isPreorder</span></label>
               <label className={s.switch}><input type="checkbox" checked={isFeatured} onChange={(e) => setIsFeatured(e.target.checked)}/><span>isFeatured</span></label>
