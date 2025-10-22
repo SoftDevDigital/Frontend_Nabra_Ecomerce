@@ -216,22 +216,6 @@ export default function Header() {
                   >
                     Productos
                   </Link>
-
-                  <Link
-                    href="/admin/promociones"
-                    className={`${styles.link} ${isActive("/admin/promociones") ? styles.active : ""}`}
-                    title="Promociones"
-                  >
-                    Promociones
-                  </Link>
-
-                  <Link
-                    href="/admin/cupones"
-                    className={`${styles.link} ${isActive("/admin/cupones") ? styles.active : ""}`}
-                    title="Cupones"
-                  >
-                    Cupones
-                  </Link>
                   
                   <Link href="/admin/productos/eliminar" className={`${styles.link} ${isActive("/admin/productos/eliminar") ? styles.active : ""}`} title="Eliminar producto">Eliminar producto</Link>
                 </>
