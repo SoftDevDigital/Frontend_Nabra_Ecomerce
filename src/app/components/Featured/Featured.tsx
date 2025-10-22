@@ -268,19 +268,16 @@ export default function Featured() {
               return (
                 <article key={p._id} className={styles.card}>
                   <Link href={`/producto/${p._id}`} className={styles.imgLink} aria-label={p.name}>
-                    <div className={styles.imgBox}>
-                      <OptimizedImage
-                        src={img}
-                        alt={p.name}
-                        width={300}
-                        height={300}
-                        className={styles.img}
-                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                        quality={85}
-                        placeholder="blur"
-                        dataAttributes={{ "data-product-img": p._id }}
-                      />
-                    </div>
+                   <div className={styles.imgBox}>
+  <img
+    src={img}
+    alt={p.name}
+    className={styles.img}
+    loading="lazy"
+    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+    data-product-img={p._id}
+  />
+</div>
                   </Link>
 
                   <div className={styles.cardBody}>
@@ -305,7 +302,7 @@ export default function Featured() {
                             onChange={(e) => setSizeById((s) => ({ ...s, [p._id]: e.target.value }))}
                             style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", minWidth: 120 }}
                           >
-                            <option value="">Elegí un talle</option>
+                            <option value="">Elige una talla</option>
                             {p.sizes!.map((s) => (
                               <option key={s} value={s}>
                                 {s}

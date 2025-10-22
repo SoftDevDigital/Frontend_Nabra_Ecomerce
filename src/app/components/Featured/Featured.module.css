@@ -167,3 +167,35 @@
   text-align: center;
   color: #666;
 }
+
+
+/* 1) Más columnas: baja el min-width de cada card */
+.grid{
+  display:grid;
+  gap:16px;                         /* un poco menos de gap */
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); /* antes 250px */
+}
+
+/* 2) Imagen más chica: reduce la “altura” del cuadro */
+.imgBox{
+  width:100%;
+  /* opción A: más chata manteniendo proporción */
+  aspect-ratio: 4 / 5;              /* antes 1 / 1 */
+  background:#fafafa;
+  overflow:hidden;
+}
+
+/* mantiene el recorte correcto */
+.img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
+
+/* Opcional: en pantallas grandes, aún más columnas */
+@media (min-width: 1200px){
+  .grid{
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  }
+}

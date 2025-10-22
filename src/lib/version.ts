@@ -1,9 +1,9 @@
 // Este archivo se genera automáticamente en cada build
 // No editar manualmente
 
-export const APP_VERSION = '159785cb';
-export const BUILD_TIMESTAMP = 1761060574338;
-export const BUILD_TIME = '2025-10-21T15:29:34.338Z';
+export const APP_VERSION = '65a409b2';
+export const BUILD_TIMESTAMP = 1761137875048;
+export const BUILD_TIME = '2025-10-22T12:57:55.048Z';
 
 // Función para verificar si hay una nueva versión disponible (ultra rápida)
 export const checkForUpdates = async (): Promise<boolean> => {
