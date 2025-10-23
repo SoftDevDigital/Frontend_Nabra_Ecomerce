@@ -265,17 +265,7 @@ export default function AdminCreatePromotionPage() {
             )}
           </div>
 
-          <label className={s.field}>
-            <span className={s.lbl}>Productos (IDs separados por coma) *</span>
-            <input
-              className={s.input}
-              placeholder="68f8ddbe...,68f90d76..."
-              value={productIdsText}
-              onChange={e => setProductIdsText(e.target.value)}
-              /* 👇 NUEVO: solo requerir CSV si no hay selección */
-              required={!selectedIds.length}
-            />
-          </label>
+         
 
           {type === "percentage" && (
             <label className={s.field}>
