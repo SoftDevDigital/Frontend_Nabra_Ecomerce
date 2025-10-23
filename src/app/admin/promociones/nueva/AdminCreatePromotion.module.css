@@ -1,0 +1,118 @@
+/* src/app/admin/promociones/nueva/AdminCreatePromotion.module.css */
+
+.page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.title {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.back {
+  font-size: 14px;
+  text-decoration: none;
+  color: #111;
+  border: 1px solid #e5e5e5;
+  padding: 8px 12px;
+  border-radius: 10px;
+}
+
+.notice {
+  background: #fff8e1;
+  border: 1px solid #ffe3a3;
+  color: #7a5900;
+  padding: 12px 14px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .grid2 { grid-template-columns: 1fr; }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.lbl {
+  font-size: 12px;
+  color: #666;
+}
+
+.input {
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 14px;
+  outline: none;
+  background: #fff;
+}
+
+.input:focus {
+  border-color: #111;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.btn {
+  background: #111;
+  color: #fff;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.btn[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ok {
+  color: #0a7f2e;
+  margin: 8px 0;
+}
+
+.error {
+  color: #b00020;
+  margin: 8px 0;
+}
+
+.small {
+  font-size: 12px;
+  color: #666;
+}

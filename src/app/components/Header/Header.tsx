@@ -188,6 +188,15 @@ export default function Header() {
               <Link href="/" className={`${styles.link} ${isActive("/") ? styles.active : ""}`}>Inicio</Link>
               <Link href="/catalogo" className={`${styles.link} ${isActive("/catalogo") ? styles.active : ""}`}>Catálogo</Link>
               <Link href="/preventa" className={`${styles.link} ${isActive("/preventa") ? styles.active : ""}`}>Preventa</Link>
+
+              {/* 👇 NUEVO: público para todos */}
+              <Link
+                href="/promociones"
+                className={`${styles.link} ${isActive("/promociones") ? styles.active : ""}`}
+              >
+                Promociones
+              </Link>
+
               {/* 👇 NUEVO: link visible solo para rol user */}
               {isUser && (
                 <Link
@@ -208,6 +217,13 @@ export default function Header() {
                   >
                     Dashboard
                   </Link>
+                  <Link
+                    href="/admin/promociones/nueva"
+                    className={`${styles.link} ${isActive("/admin/promociones") ? styles.active : ""}`}
+                    title="Promociones"
+                  >
+                    Crear Promociones
+                  </Link>
 
                   <Link
                     href="/admin/products"
@@ -216,7 +232,7 @@ export default function Header() {
                   >
                     Productos
                   </Link>
-                  
+
                   <Link href="/admin/productos/eliminar" className={`${styles.link} ${isActive("/admin/productos/eliminar") ? styles.active : ""}`} title="Eliminar producto">Eliminar producto</Link>
                 </>
               )}
@@ -286,6 +302,10 @@ export default function Header() {
               <li><Link href="/" onClick={() => setOpenMenu(false)}>Inicio</Link></li>
               <li><Link href="/catalogo" onClick={() => setOpenMenu(false)}>Catálogo</Link></li>
               <li><Link href="/preventa" onClick={() => setOpenMenu(false)}>Preventa</Link></li>
+
+              {/* 👇 NUEVO: público para todos */}
+              <li><Link href="/promociones" onClick={() => setOpenMenu(false)}>Promociones</Link></li>
+
               {/* 👇 NUEVO: link en drawer solo para rol user */}
               {isUser && (
                 <li><Link href="/pedidos" onClick={() => setOpenMenu(false)}>Pedidos</Link></li>
