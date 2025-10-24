@@ -591,7 +591,6 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
                   >
                     <div>
                       <div style={{ fontWeight: 600 }}>{it.productName}</div>
-                      <div style={{ opacity: 0.8, fontSize: 13 }}>id: {it.productId ?? "—"}</div>
                       <div style={{ marginTop: 4, fontSize: 14, opacity: 0.9 }}>
                         <span>Precio: {currency(it.price)}</span> • <span>Cant: {it.quantity}</span>
                       </div>
