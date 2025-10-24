@@ -606,6 +606,9 @@ export default function MediaUploadPage() {
               accept="image/jpeg,image/png"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             />
+            <small style={{ color: "#666", fontSize: "12px" }}>
+              📏 Límite máximo: 150MB por imagen
+            </small>
           </label>
 
           <label style={{ display: "grid", gap: 6 }}>
@@ -1143,7 +1146,7 @@ export default function MediaUploadPage() {
                   disabled={coverLoading}
                 />
                 <p style={{ marginTop: "5px", fontSize: "12px", color: "#666" }}>
-                  Formatos permitidos: JPEG, PNG, GIF, WebP (máximo 25MB)
+                  Formatos permitidos: JPEG, PNG, GIF, WebP (máximo 150MB)
                 </p>
 
                 {/* Preview del archivo */}
