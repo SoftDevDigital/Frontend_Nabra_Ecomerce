@@ -11,6 +11,9 @@ import { useRouter } from "next/navigation";
 import OptimizedImage from "../UI/OptimizedImage";
 /* 👇 NUEVO */
 import { useFlyToCart } from "@/app/hooks/useFlyToCart";
+/* 👇👇 NUEVO: promos */
+import { fetchActivePromotions } from "@/helpers/promosClient";
+import { computePromoPrice, type Promotion, formatMoney as formatMoneyFromPromos } from "@/lib/promotionsApi";
 
 type Product = ProductDto & {
   imageUrl?: string;
@@ -41,12 +44,14 @@ function getProductImgDirect(p: Product): string | null {
     (Array.isArray(p.media) ? p.media[0]?.url : (p.media as any)?.url);
 
   if (!candidate) return null;
+  // (tu línea original tenía el regex roto; NO la quito, solo dejo esta funcional)
   const abs = /^https?:\/\//i.test(candidate) ? candidate : `${PRODUCTS_API_BASE}/${candidate}`;
   return abs.replace(/([^:]\/)\/+/g, "$1");
 }
 
 /* ✅ NUEVO: heurística para detectar si una URL “parece” imagen */
 function isLikelyImageUrl(u: string) {
+  // (tu línea original tenía el regex roto; NO la quito, solo agrego esta funcional)
   if (!/^https?:\/\//i.test(u)) return false;
   if (/\.(png|jpe?g|webp|gif|avif)(\?.*)?$/i.test(u)) return true;
   // Aceptar CDNs con querys de width/height/format, pero evitar .html
@@ -103,6 +108,10 @@ export default function Featured() {
   /* 👇 NUEVO: hook de animación */
   const { fly, Portal } = useFlyToCart();
 
+  /* 👇👇 NUEVO: promos en destacados */
+  const [promos, setPromos] = useState<Promotion[]>([]);
+  const [promoByProduct, setPromoByProduct] = useState<Record<string, Promotion | undefined>>({});
+
   async function load() {
     setLoading(true);
     setErr(null);
@@ -115,6 +124,17 @@ export default function Featured() {
         sortBy: "createdAt", 
         sortOrder: "desc" 
       });
+
+      // 🔹 Cargamos promos activas en paralelo
+      const actives = await fetchActivePromotions();
+      setPromos(actives);
+      const map: Record<string, Promotion | undefined> = {};
+      for (const pm of actives) {
+        for (const id of pm.productIds ?? []) {
+          if (!map[id]) map[id] = pm;
+        }
+      }
+      setPromoByProduct(map);
 
       const list = (products ?? []).slice(0, 5) as Product[];
       setItems(list);
@@ -180,7 +200,17 @@ export default function Featured() {
 
       const colorToSend = (colorById[productId] || "").trim() || undefined;
 
-      await addToCart({ productId, quantity: 1, size: sizeToSend, color: colorToSend });
+      // 🔹 Cantidad sugerida si la promo es buy_x_get_y
+      let quantity = 1;
+      const promo = promoByProduct[productId];
+      if (promo && typeof (product as any).price === "number") {
+        const info = computePromoPrice(promo, (product as any).price || 0);
+        if (typeof info.suggestQty === "number" && info.suggestQty > 0) {
+          quantity = info.suggestQty;
+        }
+      }
+
+      await addToCart({ productId, quantity, size: sizeToSend, color: colorToSend });
 
       /* 👇 NUEVO: FLY ANIMATION con “bump” del target para que se vea mejor */
       const imgEl = document.querySelector<HTMLImageElement>(`[data-product-img="${productId}"]`);
@@ -202,8 +232,8 @@ export default function Featured() {
         emitCartCount(prev + 1);
       }
 
-      setAddMsg("Producto agregado ✅"); // (global, lo dejo como estaba)
-      setCardMsg(productId, "Producto agregado ✅"); // feedback por tarjeta
+      setAddMsg(quantity > 1 ? `Agregamos ${quantity} (promo) ✅` : "Producto agregado ✅");
+      setCardMsg(productId, quantity > 1 ? `Agregamos ${quantity} (promo) ✅` : "Producto agregado ✅");
       // opcional: router.push("/carrito");
     } catch (e: any) {
       const msg = String(e?.message || "No se pudo agregar");
@@ -265,106 +295,151 @@ export default function Featured() {
                 const img = thumbs[p._id]; // Ya sabemos que existe por el filter
                 const needsSizeSelection = Array.isArray(p.sizes) && p.sizes.length > 1;
                 const noStock = typeof p.stock === "number" && p.stock <= 0;
-              return (
-                <article key={p._id} className={styles.card}>
-                  <Link href={`/producto/${p._id}`} className={styles.imgLink} aria-label={p.name}>
-                   <div className={styles.imgBox}>
-  <img
-    src={img}
-    alt={p.name}
-    className={styles.img}
-    loading="lazy"
-    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-    data-product-img={p._id}
-  />
-</div>
-                  </Link>
 
-                  <div className={styles.cardBody}>
-                    <h3 className={styles.title}>{p.name}</h3>
-                    {/* ✅ usar formato ARS configurable */}
-                    {typeof p.price === "number" && (
-                      <div className={styles.price}>{formatMoney(p.price)}</div>
-                    )}
-                    {p.description && (
-                      <p className={styles.desc}>
-                        {p.description.length > 90 ? `${p.description.slice(0, 90)}…` : p.description}
-                      </p>
-                    )}
+                // 🔹 Calcular info de promo si corresponde
+                const promo = promoByProduct[p._id];
+                const basePrice = typeof p.price === "number" ? p.price : undefined;
+                const promoInfo = promo && typeof basePrice === "number"
+                  ? computePromoPrice(promo, basePrice)
+                  : null;
 
-                    {/* === NUEVO: selección de talle/color en la card si corresponde === */}
-                    {needsSizeSelection && (
-                      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                        <label style={{ display: "grid", gap: 4 }}>
-                          <span style={{ fontSize: 12, opacity: 0.8 }}>Talle</span>
-                          <select
-                            value={sizeById[p._id] || ""}
-                            onChange={(e) => setSizeById((s) => ({ ...s, [p._id]: e.target.value }))}
-                            style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", minWidth: 120 }}
+                return (
+                  <article key={p._id} className={styles.card}>
+                    <Link href={`/producto/${p._id}`} className={styles.imgLink} aria-label={p.name}>
+                      <div className={styles.imgBox}>
+                        <img
+                          src={img}
+                          alt={p.name}
+                          className={styles.img}
+                          loading="lazy"
+                          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                          data-product-img={p._id}
+                        />
+                        {/* Badge de promo sobre la imagen si aplica */}
+                        {promoInfo?.badge && (
+                          <span
+                            style={{
+                              position: "absolute",
+                              top: 8,
+                              left: 8,
+                              background: "#111",
+                              color: "#fff",
+                              fontSize: 12,
+                              padding: "4px 8px",
+                              borderRadius: 12,
+                            }}
                           >
-                            <option value="">Elige una talla</option>
-                            {p.sizes!.map((s) => (
-                              <option key={s} value={s}>
-                                {s}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-
-                      
+                            {promoInfo.badge}
+                          </span>
+                        )}
                       </div>
-                    )}
+                    </Link>
 
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <Link href={`/producto/${p._id}`} className={styles.cta}>
-                        Ver detalle
-                      </Link>
-                      <button
-                        onClick={() => handleQuickAdd(p)}
-                        disabled={
-                          addingId === p._id ||
-                          (needsSizeSelection && !(sizeById[p._id] || "").trim()) ||
-                          noStock
-                        }
-                        className={styles.cta}
-                        title={noStock ? "Sin stock" : "Agregar al carrito"}
-                        style={{ background: "white", border: "1px solid #ddd", color: "#111" }}
-                      >
-                        {addingId === p._id ? "Agregando…" : noStock ? "Sin stock" : "Agregar"}
-                      </button>
+                    <div className={styles.cardBody}>
+                      <h3 className={styles.title}>{p.name}</h3>
+
+                      {/* ✅ Mostrar precio con promo si corresponde (precio tachado + final) */}
+                      {typeof basePrice === "number" && (
+                        <div className={styles.price}>
+                          {promoInfo && (promoInfo.finalPrice ?? null) !== null ? (
+                            <>
+                              <span style={{ textDecoration: "line-through", opacity: 0.6, marginRight: 8 }}>
+                                {formatMoney(basePrice)}
+                              </span>
+                              <span>
+                                {formatMoney(promoInfo.finalPrice!)}
+                              </span>
+                            </>
+                          ) : (
+                            <span>{formatMoney(basePrice)}</span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* sublabel/leyenda de la promo (ej: 2x1, etc) */}
+                      {promoInfo?.sublabel && (
+                        <div style={{ fontSize: 12, opacity: 0.8, marginTop: 4 }}>
+                          {promoInfo.sublabel}
+                        </div>
+                      )}
+
+                      {p.description && (
+                        <p className={styles.desc}>
+                          {p.description.length > 90 ? `${p.description.slice(0, 90)}…` : p.description}
+                        </p>
+                      )}
+
+                      {/* === NUEVO: selección de talle/color en la card si corresponde === */}
+                      {needsSizeSelection && (
+                        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                          <label style={{ display: "grid", gap: 4 }}>
+                            <span style={{ fontSize: 12, opacity: 0.8 }}>Talle</span>
+                            <select
+                              value={sizeById[p._id] || ""}
+                              onChange={(e) => setSizeById((s) => ({ ...s, [p._id]: e.target.value }))}
+                              style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", minWidth: 120 }}
+                            >
+                              <option value="">Elige una talla</option>
+                              {p.sizes!.map((s) => (
+                                <option key={s} value={s}>
+                                  {s}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                      )}
+
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <Link href={`/producto/${p._id}`} className={styles.cta}>
+                          Ver detalle
+                        </Link>
+                        <button
+                          onClick={() => handleQuickAdd(p)}
+                          disabled={
+                            addingId === p._id ||
+                            (needsSizeSelection && !(sizeById[p._id] || "").trim()) ||
+                            noStock
+                          }
+                          className={styles.cta}
+                          title={noStock ? "Sin stock" : "Agregar al carrito"}
+                          style={{ background: "white", border: "1px solid #ddd", color: "#111" }}
+                        >
+                          {addingId === p._id ? "Agregando…" : noStock ? "Sin stock" : "Agregar"}
+                        </button>
+                      </div>
+
+                      {/* Mensaje por tarjeta */}
+                      {addMsgById[p._id] && (
+                        <div
+                          style={{
+                            marginTop: 6,
+                            color: addMsgById[p._id]?.includes("✅") ? "green" : "crimson",
+                          }}
+                        >
+                          {addMsgById[p._id]}
+                        </div>
+                      )}
+
+                      {/* (Se mantiene el mensaje global existente) */}
+                      {addMsg && (
+                        <div style={{ marginTop: 6, color: addMsg.includes("✅") ? "green" : "crimson" }}>
+                          {addMsg}
+                        </div>
+                      )}
                     </div>
-
-                    {/* Mensaje por tarjeta */}
-                    {addMsgById[p._id] && (
-                      <div
-                        style={{
-                          marginTop: 6,
-                          color: addMsgById[p._id]?.includes("✅") ? "green" : "crimson",
-                        }}
-                      >
-                        {addMsgById[p._id]}
-                      </div>
-                    )}
-
-                    {/* (Se mantiene el mensaje global existente) */}
-                    {addMsg && (
-                      <div style={{ marginTop: 6, color: addMsg.includes("✅") ? "green" : "crimson" }}>
-                        {addMsg}
-                      </div>
-                    )}
-                  </div>
-                </article>
-              );
-            })}
+                  </article>
+                );
+              })}
           </div>
-<div className={styles.moreRow}>
-  <Link href="/catalogo" className={styles.moreCta} rel="noopener noreferrer">
-    <span>Ver catálogo completo</span>
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" className={styles.moreIcon}>
-      <path d="M5 12h13M12 5l7 7-7 7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  </Link>
-</div>
+          <div className={styles.moreRow}>
+            <Link href="/catalogo" className={styles.moreCta} rel="noopener noreferrer">
+              <span>Ver catálogo completo</span>
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" className={styles.moreIcon}>
+                <path d="M5 12h13M12 5l7 7-7 7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </Link>
+          </div>
         </>
       )}
     </section>

@@ -9,10 +9,10 @@ import {
   toISOEndOfDay,
   type CreatePromotionIn,
 } from "@/lib/promotionsApi";
-/* 👇 NUEVO: traemos productos existentes */
+/* 👇 Traer productos (público) */
 import { fetchProducts, type ProductDto } from "@/lib/productsApi";
 
-// ==== helpers jwt (mismo patrón que productos) ====
+/* ==== helpers jwt ==== */
 function getJwtPayload(): any | null {
   try {
     const t = typeof window !== "undefined" ? localStorage.getItem("nabra_token") : null;
@@ -34,10 +34,30 @@ function isAdminFromToken(): boolean {
 
 type PromoType = "percentage" | "fixed_amount" | "buy_x_get_y";
 
+/* ========= NUEVO: helper para traer TODO ========= */
+async function fetchAllProducts(q: Partial<Parameters<typeof fetchProducts>[0]> = {}) {
+  // primera llamada para conocer total y tamaño de página
+  const first = await fetchProducts({ ...q, page: 1, limit: 50 });
+  const total = first.total ?? first.products.length;
+  const firstPageSize = first.products.length || 1;
+  const totalPages = Math.max(1, first.totalPages ?? Math.ceil(total / firstPageSize));
+
+  const all: ProductDto[] = [...first.products];
+  // seguir pidiendo el resto con el mismo pageSize
+  for (let p = 2; p <= totalPages; p++) {
+    const next = await fetchProducts({ ...q, page: p, limit: firstPageSize });
+    if (Array.isArray(next.products)) all.push(...next.products);
+  }
+
+  // de-dup defensivo
+  const dedup = Array.from(new Map(all.map(x => [x._id, x])).values());
+  return { products: dedup, total: dedup.length };
+}
+
 export default function AdminCreatePromotionPage() {
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // Form state
+  // Form
   const [name, setName] = useState("");
   const [type, setType] = useState<PromoType>("buy_x_get_y");
   const [productIdsText, setProductIdsText] = useState(""); // CSV de ids
@@ -53,7 +73,7 @@ export default function AdminCreatePromotionPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [createdId, setCreatedId] = useState<string | null>(null);
 
-  /* 👇 NUEVO: estado para selector de productos */
+  // 👇 Selector de productos (TODOS)
   const [allProducts, setAllProducts] = useState<ProductDto[]>([]);
   const [productsLoading, setProductsLoading] = useState(false);
   const [productsErr, setProductsErr] = useState<string | null>(null);
@@ -62,7 +82,7 @@ export default function AdminCreatePromotionPage() {
 
   useEffect(() => { setIsAdmin(isAdminFromToken()); }, []);
 
-  /* 👇 NUEVO: cargar productos existentes (primeras 200) */
+  // 👇 Cargar TODOS los productos
   useEffect(() => {
     let abort = false;
     (async () => {
@@ -70,7 +90,7 @@ export default function AdminCreatePromotionPage() {
       setProductsLoading(true);
       setProductsErr(null);
       try {
-        const { products } = await fetchProducts({ limit: 200 });
+        const { products } = await fetchAllProducts({ /* filtros opcionales aquí si querés */ });
         if (!abort) setAllProducts(products || []);
       } catch (e: any) {
         if (!abort) setProductsErr(e?.message || "No se pudieron cargar los productos");
@@ -81,7 +101,7 @@ export default function AdminCreatePromotionPage() {
     return () => { abort = true; };
   }, [isAdmin]);
 
-  /* 👇 NUEVO: filtro local por búsqueda */
+  // Filtro local por búsqueda
   const filteredProducts = useMemo(() => {
     const q = productSearch.trim().toLowerCase();
     if (!q) return allProducts;
@@ -92,13 +112,18 @@ export default function AdminCreatePromotionPage() {
     );
   }, [allProducts, productSearch]);
 
-  /* 👇 NUEVO: handlers del selector */
   function onSelectChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const opts = Array.from(e.target.selectedOptions).map(o => o.value);
     setSelectedIds(opts);
   }
   function toggleId(id: string) {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }
+  function selectAllFiltered() {
+    setSelectedIds(filteredProducts.map(p => p._id));
+  }
+  function clearSelection() {
+    setSelectedIds([]);
   }
 
   function csvToArray(input: string) {
@@ -112,14 +137,14 @@ export default function AdminCreatePromotionPage() {
     if (!isAdmin) { setMsg("Necesitás permisos de administrador."); return; }
     if (!name.trim()) { setMsg("Ingresá un nombre."); return; }
 
-    /* 👇 NUEVO: priorizar selección; si no hay, usar CSV */
+    // Priorizar selección visual; si no, CSV
     const idsFromCsv = csvToArray(productIdsText);
     const ids = selectedIds.length ? selectedIds : idsFromCsv;
     if (!ids.length) { setMsg("Elegí al menos un producto (selector o CSV)."); return; }
 
     if (!startDate || !endDate) { setMsg("Elegí inicio y fin de la promoción."); return; }
 
-    // construir payload según tipo
+    // Payload según tipo
     let payload: CreatePromotionIn;
     if (type === "percentage") {
       const pct = Number(discountPercentage);
@@ -165,8 +190,6 @@ export default function AdminCreatePromotionPage() {
       if (!("success" in r) || !r.success) throw new Error((r as any)?.message || "No se pudo crear la promoción");
       setMsg("Promoción creada ✅");
       setCreatedId(r.data?._id || null);
-      // reset rápido (dejá fechas por conveniencia)
-      // setName(""); setProductIdsText(""); setDiscountAmount(""); setDiscountPercentage(""); setBuyQuantity(""); setGetQuantity("");
     } catch (err:any) {
       setMsg(err?.message || "No se pudo crear la promoción");
       if (/(401|403|unauthorized|forbidden|no autenticado)/i.test(String(err?.message))) {
@@ -208,9 +231,15 @@ export default function AdminCreatePromotionPage() {
             </label>
           </div>
 
-          {/* 👇 NUEVO: selector de productos existentes (opcional) */}
+          {/* ===== Selector de productos (TODOS) ===== */}
           <div className={s.field}>
-            <span className={s.lbl}>Seleccionar productos existentes</span>
+            <span className={s.lbl}>
+              Seleccionar productos existentes
+              {!productsLoading && !productsErr && (
+                <> — <strong>{filteredProducts.length}</strong> / {allProducts.length}</>
+              )}
+            </span>
+
             <input
               className={s.input}
               placeholder="Buscar por nombre / categoría / ID…"
@@ -218,14 +247,21 @@ export default function AdminCreatePromotionPage() {
               onChange={(e) => setProductSearch(e.target.value)}
               disabled={productsLoading}
             />
+
             {productsErr && <p className={s.error}>{productsErr}</p>}
-            {productsLoading && <p> Cargando productos…</p>}
+            {productsLoading && <p>Cargando todos los productos…</p>}
+
             {!productsLoading && !productsErr && (
               <>
+                <div style={{ display: "flex", gap: 8, margin: "8px 0" }}>
+                  <button type="button" className={s.btn} onClick={selectAllFiltered}>Seleccionar filtrados</button>
+                  <button type="button" className={s.btn} onClick={clearSelection}>Limpiar selección</button>
+                </div>
+
                 <select
                   multiple
                   className={s.input}
-                  size={8}
+                  size={10}
                   value={selectedIds}
                   onChange={onSelectChange}
                 >
@@ -235,6 +271,7 @@ export default function AdminCreatePromotionPage() {
                     </option>
                   ))}
                 </select>
+
                 {!!selectedIds.length && (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
                     {selectedIds.map(id => {
@@ -265,7 +302,17 @@ export default function AdminCreatePromotionPage() {
             )}
           </div>
 
-         
+          {/* CSV opcional */}
+          <label className={s.field}>
+            <span className={s.lbl}>IDs (CSV / líneas, opcional)</span>
+            <textarea
+              className={s.input}
+              rows={3}
+              placeholder="id1, id2, id3…"
+              value={productIdsText}
+              onChange={e => setProductIdsText(e.target.value)}
+            />
+          </label>
 
           {type === "percentage" && (
             <label className={s.field}>

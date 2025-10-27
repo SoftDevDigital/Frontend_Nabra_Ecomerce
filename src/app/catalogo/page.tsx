@@ -1,4 +1,3 @@
-// src/app/catalogo/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState, Suspense } from "react";
@@ -14,6 +13,9 @@ import { resolveImageUrls } from "@/lib/resolveImageUrls";
 import { addToCart } from "@/lib/cartClient";
 import s from "./Catalogo.module.css";
 import { useFlyToCart } from "@/app/hooks/useFlyToCart";
+/* 🟢 NUEVO */
+import { fetchActivePromotions } from "@/helpers/promosClient";
+import { Promotion, computePromoPrice } from "@/lib/promotionsApi";
 
 function currency(n?: number) {
   if (typeof n !== "number") return "";
@@ -138,9 +140,8 @@ function CatalogoPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sp]);
 
+  /* 🔧 Leemos los filtros (menos paginación, que la ignoramos) */
   const query = useMemo(() => {
-    const page = Number(sp.get("page") || "1");
-    const limit = Number(sp.get("limit") || "12");
     const category = sp.get("category") || undefined;
     const search = sp.get("search") || undefined;
     const minPrice = sp.get("minPrice") ? Number(sp.get("minPrice")) : undefined;
@@ -150,10 +151,10 @@ function CatalogoPageInner() {
     const isFeatured = sp.get("isFeatured") ? sp.get("isFeatured") === "true" : undefined;
     const isPreorder = sp.get("isPreorder") ? sp.get("isPreorder") === "true" : undefined;
     const size = sp.get("size") || undefined;
-    return { page, limit, category, search, minPrice, maxPrice, sortBy, sortOrder, isFeatured, isPreorder, size };
+    return { category, search, minPrice, maxPrice, sortBy, sortOrder, isFeatured, isPreorder, size };
   }, [sp]);
 
-  /* 👇 FIX #1: forzar un orden estable si el usuario no eligió uno */
+  /* Orden estable por defecto */
   const queryForFetch = useMemo(() => {
     return {
       ...query,
@@ -162,33 +163,97 @@ function CatalogoPageInner() {
     };
   }, [query]);
 
-  /* ----- Productos ----- */
+  /* ===== Helper: traer TODOS los productos (paginando hasta completar) ===== */
+  async function fetchAllProducts(q: any) {
+    const first = await fetchProducts({ ...q, page: 1, limit: 50 });
+    const total = first.total ?? first.products.length;
+    const pageSize = first.products.length || 1;
+    const totalPages = Math.max(1, first.totalPages ?? Math.ceil(total / pageSize));
+
+    let all: ProductDto[] = first.products.slice();
+
+    for (let p = 2; p <= totalPages; p++) {
+      const next = await fetchProducts({ ...q, page: p, limit: pageSize });
+      if (Array.isArray(next.products)) all.push(...next.products);
+    }
+
+    const dedup = Array.from(new Map(all.map((x) => [x._id, x])).values());
+    return { products: dedup, total };
+  }
+
+  /* 🟢 NUEVO: Estado y carga de promociones */
+  const [promos, setPromos] = useState<Promotion[]>([]);
+  const promosByProduct = useMemo(() => {
+    const map = new Map<string, Promotion[]>();
+    for (const pr of promos) {
+      for (const id of pr.productIds || []) {
+        const arr = map.get(id) ?? [];
+        arr.push(pr);
+        map.set(id, arr);
+      }
+    }
+    return map;
+  }, [promos]);
+
   useEffect(() => {
     let abort = false;
-
-    /* 👇 FIX #2: de-duplicar por _id (defensivo) */
-    const dedupeById = (arr: ProductDto[]) => {
-      const map = new Map<string, ProductDto>();
-      for (const p of arr) {
-        if (p && p._id) map.set(p._id, p);
+    (async () => {
+      try {
+        const list = await fetchActivePromotions();
+        if (!abort) setPromos(list);
+      } catch {
+        console.warn("No se pudieron obtener promociones activas");
       }
-      return Array.from(map.values());
-    };
+    })();
+    return () => { abort = true; };
+  }, []);
+
+  /* 🟢 NUEVO: calcular precio efectivo */
+  function effectivePriceFor(p: ProductDto) {
+    const base = typeof p.price === "number" ? p.price : (p as any).originalPrice ?? 0;
+    const promosForProduct = promosByProduct.get(p._id) || [];
+
+    if (!promosForProduct.length) {
+      const fp = (p as any).finalPrice as number | undefined;
+      const show = typeof fp === "number" ? fp : base;
+      const off = (typeof base === "number" && typeof fp === "number" && fp < base)
+        ? Math.round((1 - fp / base) * 100) : 0;
+      return { base, show, off, badge: null, promo: null };
+    }
+
+    let best = { final: base, badge: null as string | null, promo: null as Promotion | null };
+    for (const pr of promosForProduct) {
+      const info = computePromoPrice(pr, base);
+      const f = typeof info.finalPrice === "number" ? info.finalPrice : base;
+      if (best.promo === null || f < best.final) {
+        best = { final: f, badge: info.badge || null, promo: pr };
+      }
+    }
+    const off = best.final < base ? Math.round(100 - (best.final / base) * 100) : 0;
+    return { base, show: best.final, off, badge: best.badge, promo: best.promo };
+  }
+
+  /* ----- Productos (sin paginación visual) ----- */
+  useEffect(() => {
+    let abort = false;
 
     (async () => {
       setLoading(true);
       setErr(null);
       setThumbs({});
       try {
-        const res = await fetchProducts(queryForFetch);
+        const { products: allProducts, total } = await fetchAllProducts(queryForFetch);
         if (abort) return;
 
-        const uniqueProducts = dedupeById(res.products);
-
-        setData({ ...res, products: uniqueProducts });
+        setData({
+          products: allProducts,
+          total,
+          page: 1,
+          totalPages: 1,
+        });
 
         const entries = await Promise.all(
-          uniqueProducts.map(async (p) => {
+          allProducts.map(async (p) => {
             if (p.images?.length) {
               try {
                 const urls = await resolveImageUrls(p.images);
@@ -198,7 +263,6 @@ function CatalogoPageInner() {
             return null;
           })
         );
-
         const validEntries = entries.filter((e): e is [string, string] => e !== null);
         if (!abort) setThumbs(Object.fromEntries(validEntries));
       } catch (e: any) {
@@ -312,7 +376,8 @@ function CatalogoPageInner() {
     const usp = new URLSearchParams(sp.toString());
     if (value === undefined || value === "") usp.delete(name);
     else usp.set(name, value);
-    if (name !== "page") usp.set("page", "1");
+    usp.delete("page");
+    usp.delete("limit");
     router.replace(`${pathname}?${usp.toString()}`);
   }
 
@@ -323,7 +388,6 @@ function CatalogoPageInner() {
       setParam("search", sanitized || undefined);
     }, 300);
     return () => clearTimeout(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm]);
 
   useEffect(() => {
@@ -332,7 +396,6 @@ function CatalogoPageInner() {
       setParam("category", sanitized || undefined);
     }, 300);
     return () => clearTimeout(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categoryTerm]);
 
   useEffect(() => {
@@ -341,14 +404,11 @@ function CatalogoPageInner() {
       setParam("size", sanitized || undefined);
     }, 300);
     return () => clearTimeout(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sizeTerm]);
 
-  const { products, total, page, totalPages } = data;
-  const totalAll = cats.reduce((acc, c) => acc + (c.count || 0), 0);
-
+  const { products, total } = data;
   const visibleProducts = data.products;
-  const shownCount = data.total;
+  const shownCount = total;
 
   return (
     <main className={s.page}>
@@ -461,201 +521,105 @@ function CatalogoPageInner() {
         </section>
       )}
 
-      {openSort && (
-        <section className={s.mobilePanel}>
-          <select
-            className={s.select}
-            defaultValue={sp.get("sortBy") ?? ""}
-            onChange={(e) => setParam("sortBy", e.target.value || undefined)}
-          >
-            <option value="">Ordenar por…</option>
-            <option value="price">Precio</option>
-            <option value="name">Nombre</option>
-            <option value="createdAt">Recientes</option>
-            <option value="relevance">Relevancia</option>
-          </select>
-
-          <select
-            className={s.select}
-            defaultValue={sp.get("sortOrder") ?? "asc"}
-            onChange={(e) => setParam("sortOrder", e.target.value)}
-          >
-            <option value="asc">Asc</option>
-            <option value="desc">Desc</option>
-          </select>
-
-          <select
-            className={s.select}
-            defaultValue={sp.get("limit") ?? "12"}
-            onChange={(e) => setParam("limit", e.target.value)}
-            title="Items por página"
-          >
-            {[12, 24, 36, 48].map(n => <option key={n} value={n}>{n} / pág.</option>)}
-          </select>
-
-          <button
-            type="button"
-            className={`${s.btn} ${s.btnPrimary} ${s.fullW}`}
-            onClick={() => setOpenSort(false)}
-          >
-            Aplicar
-          </button>
-        </section>
-      )}
-
-      {/* Chips categorías */}
-      <section className={s.chips}>
-        <button
-          onClick={() => { setCategoryTerm(""); setParam("category", undefined); }}
-          className={`${s.chip} ${!sp.get("category") ? s.chipActive : ""}`}
-          title={`Todas${cats.length ? "" : ""}`}
-        >
-          Todas
-        </button>
-
-        {catsLoading && <span className={s.muted}>Cargando categorías…</span>}
-        {!catsLoading && catsErr && <span className={s.error}>{catsErr}</span>}
-
-        {!catsLoading && !catsErr && cats.map(c => {
-          const active = (sp.get("category") ?? "") === c.category;
-          return (
-            <button
-              key={c.category}
-              onClick={() => { setCategoryTerm(c.category); setParam("category", c.category); }}
-              className={`${s.chip} ${active ? s.chipActive : ""}`}
-              title={`${c.category} (${c.count})`}
-            >
-              {c.category} · {c.count}
-            </button>
-          );
-        })}
-      </section>
-
-      {/* Stats de categoría (opcional) */}
-      {sp.get("category") && (
-        <section className={`${s.statsCard} ${s.hideCatStats}`}>
-          {catStatsLoading && <p className={s.m0}>Cargando estadísticas…</p>}
-          {!catStatsLoading && catStatsErr && <p className={`${s.m0} ${s.error}`}>{catStatsErr}</p>}
-          {!catStatsLoading && !catStatsErr && catStats && (
-            <div className={s.statsGrid}>
-              <div><div className={s.k}>Categoría</div><div className={s.v}>{catStats.category}</div></div>
-              <div><div className={s.k}>Productos</div><div className={s.v}>{catStats.totalProducts}</div></div>
-              <div><div className={s.k}>Precio mín.</div><div className={s.v}>{currency(catStats.priceRange?.min)}</div></div>
-              <div><div className={s.k}>Precio máx.</div><div className={s.v}>{currency(catStats.priceRange?.max)}</div></div>
-              <div><div className={s.k}>Promedio</div><div className={s.v}>{currency(catStats.averagePrice)}</div></div>
-              <div><div className={s.k}>Talles disp.</div>
-                <div className={s.v}>
-                  {Array.isArray(catStats.availableSizes) && catStats.availableSizes.length
-                    ? catStats.availableSizes.join(", ") : "-"}
-                </div>
-              </div>
-              <div><div className={s.k}>Destacados</div><div className={s.v}>{catStats.featuredProducts}</div></div>
-              <div><div className={s.k}>Preventa</div><div className={s.v}>{catStats.preorderProducts}</div></div>
-            </div>
-          )}
-        </section>
-      )}
-
       {/* Resultados */}
       {loading && <p>Cargando…</p>}
       {!loading && err && <p className={s.error}>{err}</p>}
       {!loading && !err && (
         <>
           <div className={s.grid}>
-            {visibleProducts
-              .filter(p => thumbs[p._id])
-              .map(p => {
-                const needsSizeSelection = Array.isArray(p.sizes) && p.sizes.length > 1;
-                const isOff = hasDiscount(p);
-                const base = basePrice(p);
-                const show = displayPrice(p);
-                const off = discountPercent(p);
+            {visibleProducts.map(p => {
+              const needsSizeSelection = Array.isArray(p.sizes) && p.sizes.length > 1;
 
-                return (
-                  <article key={p._id} className={s.card}>
-                    <a href={`/producto/${p._id}`} aria-label={p.name} className={s.thumbLink}>
-                      <div className={s.thumbBox}>
+              /* 🟢 NUEVO: aplicar promociones si existen */
+              const { base, show, off, badge, promo } = effectivePriceFor(p);
+              const isOff = (typeof show === "number" && show < base) || (promo?.type === "buy_x_get_y");
+              const thumb = thumbs[p._id];
+
+              return (
+                <article key={p._id} className={s.card}>
+                  <a href={`/producto/${p._id}`} aria-label={p.name} className={s.thumbLink}>
+                    <div className={s.thumbBox}>
+                      {thumb ? (
                         <img
-                          src={thumbs[p._id]}
+                          src={thumb}
                           alt={p.name}
                           className={s.thumbImg}
                           loading="lazy"
                           data-product-img={p._id}
                         />
-                      </div>
-                    </a>
-
-                    <h3 className={s.cardTitle}>{p.name}</h3>
-
-                    <div className={s.cardPrice}>
-                      {isOff && typeof base === "number" ? (
-                        <>
-                          <span className={s.oldPrice}>{currency(base)}</span>
-                          <span className={s.newPrice}>{currency(show)}</span>
-                          {off > 0 && <span className={s.discountBadge}>-{off}%</span>}
-                        </>
                       ) : (
-                        <>{currency(show)}</>
+                        <div className={s.thumbImg} style={{display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,opacity:.6}}>
+                          Sin imagen
+                        </div>
                       )}
                     </div>
+                  </a>
 
-                    {p.category && <div className={s.cardCat}>{p.category}</div>}
+                  <h3 className={s.cardTitle}>{p.name}</h3>
 
-                    {needsSizeSelection && (
-                      <div className={s.inlineSelectors}>
-                        <label className={s.inlineField}>
-                          <span className={s.inlineLabel}>Talle</span>
-                          <select
-                            value={sizeById[p._id] || ""}
-                            onChange={(e) => setSizeById((st) => ({ ...st, [p._id]: e.target.value }))}
-                            className={s.inlineSelect}
-                          >
-                            <option value="">Elige una talla</option>
-                            {p.sizes!.map((sz) => (
-                              <option key={sz} value={sz}>{sz}</option>
-                            ))}
-                          </select>
-                        </label>
-                      </div>
+                  <div className={s.cardPrice}>
+                    {(isOff && typeof base === "number" && show < base) ? (
+                      <>
+                        <span className={s.oldPrice}>{currency(base)}</span>
+                        <span className={s.newPrice}>{currency(show)}</span>
+                        {off > 0 && <span className={s.discountBadge}>-{off}%</span>}
+                        {badge && <span className={s.discountBadge}>{badge}</span>}
+                      </>
+                    ) : (
+                      <>
+                        <span className={s.newPrice}>{currency(show)}</span>
+                        {badge && <span className={s.discountBadge}>{badge}</span>}
+                      </>
                     )}
+                  </div>
 
-                    <div className={s.cardActions}>
-                      <a
-                        href={`/producto/${p._id}`}
-                        className={`${s.btn} ${s.btnPrimary}`}
-                      >
-                        Ver detalle
-                      </a>
+                  {p.category && <div className={s.cardCat}>{p.category}</div>}
 
-                      <button
-                        onClick={() => handleQuickAdd(p)}
-                        disabled={addingId === p._id || (needsSizeSelection && !(sizeById[p._id] || "").trim())}
-                        className={`${s.btn} ${s.btnPrimary} ${addingId === p._id ? s.btnDisabled : ""}`}
-                        title="Agregar al carrito"
-                      >
-                        {addingId === p._id ? "Agregando…" : "Agregar"}
-                      </button>
+                  {needsSizeSelection && (
+                    <div className={s.inlineSelectors}>
+                      <label className={s.inlineField}>
+                        <span className={s.inlineLabel}>Talle</span>
+                        <select
+                          value={sizeById[p._id] || ""}
+                          onChange={(e) => setSizeById((st) => ({ ...st, [p._id]: e.target.value }))}
+                          className={s.inlineSelect}
+                        >
+                          <option value="">Elige una talla</option>
+                          {p.sizes!.map((sz) => (
+                            <option key={sz} value={sz}>{sz}</option>
+                          ))}
+                        </select>
+                      </label>
                     </div>
+                  )}
 
-                    {addMsgById[p._id] && (
-                      <div className={`${s.feedback} ${addMsgById[p._id]?.includes("✅") ? s.ok : s.err}`}>
-                        {addMsgById[p._id]}
-                      </div>
-                    )}
-                  </article>
-                );
-              })}
+                  <div className={s.cardActions}>
+                    <a
+                      href={`/producto/${p._id}`}
+                      className={`${s.btn} ${s.btnPrimary}`}
+                    >
+                      Ver detalle
+                    </a>
+
+                    <button
+                      onClick={() => handleQuickAdd(p)}
+                      disabled={addingId === p._id || (needsSizeSelection && !(sizeById[p._id] || "").trim())}
+                      className={`${s.btn} ${s.btnPrimary} ${addingId === p._id ? s.btnDisabled : ""}`}
+                      title="Agregar al carrito"
+                    >
+                      {addingId === p._id ? "Agregando…" : "Agregar"}
+                    </button>
+                  </div>
+
+                  {addMsgById[p._id] && (
+                    <div className={`${s.feedback} ${addMsgById[p._id]?.includes("✅") ? s.ok : s.err}`}>
+                      {addMsgById[p._id]}
+                    </div>
+                  )}
+                </article>
+              );
+            })}
           </div>
-
-          <div className={s.pagination}>
-            <button className={s.pageBtn} disabled={page <= 1} onClick={() => setParam("page", String(page - 1))}>Anterior</button>
-            <span className={s.pageInfo}>Página {page} de {totalPages}</span>
-            <button className={s.pageBtn} disabled={page >= totalPages} onClick={() => setParam("page", String(page + 1))}>Siguiente</button>
-          </div>
-
-          {addMsgGlobal && (
-            <p className={`${s.center} ${addMsgGlobal.includes("✅") ? s.ok : s.err}`}>{addMsgGlobal}</p>
-          )}
         </>
       )}
     </main>
