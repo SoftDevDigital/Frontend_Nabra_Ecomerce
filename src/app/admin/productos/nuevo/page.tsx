@@ -132,7 +132,7 @@ function totalFromStockBySize(map: Record<string, number> | null): number {
 
 /* ===== chequeo de límite de subida (para evitar 413) ===== */
 function getMaxUploadBytes(): number {
-  const mb = Number(process.env.NEXT_PUBLIC_MAX_UPLOAD_MB ?? "1"); // default 1MB
+  const mb = 150;
   return Math.max(0.1, mb) * 1024 * 1024;
 }
 function checkFilesSize(files: FileList | null): { ok: boolean; msg?: string } {
@@ -701,6 +701,8 @@ export default function AdminCreateProductPage() {
               />
               <small className={s.help}>
                 Podés adjuntar varias. El backend generará URLs y completará <code>images[]</code>.
+                <br />
+                <strong>📏 Límite máximo por imagen: 150MB</strong>
               </small>
             </label>
 
