@@ -9,29 +9,57 @@ import { apiFetch } from "@/lib/api";
 type Product = { _id: string; name: string; price?: number; [k: string]: any };
 type OrderItem = {
   product?: Product | null;
-  productName?: string;   // por compat
+  productName?: string;   // compat
   quantity: number;
   size?: string;
   price: number;          // unitario
 };
 type OrderStatus = "pending" | "paid" | "shipped" | "delivered" | "cancelled" | string;
 
+type ShippingContact = { name?: string; phone?: string; email?: string };
+
 type Order = {
   _id: string;
+  orderNumber?: string;
   items: OrderItem[];
   userId: string | { _id: string; email?: string };
   cartId?: string;
-  total: number;
-  status: OrderStatus;
-  shippingAddress?: { street?: string; city?: string; zip?: string; country?: string };
-  currency?: string;       // "USD" | "ARS" | etc.
-  shippingCost?: number;
+
+  /* Totales */
   subtotal?: number;
+  discount?: number;        // backend viejo
+  discountAmount?: number;  // alias local
   tax?: number;
-  discount?: number;
+  shippingCost?: number;
+  total: number;
+  currency?: string;        // "USD" | "ARS" | etc.
+
+  /* Estados */
+  status: OrderStatus;
+  paymentStatus?: string;   // e.g. approved
+  paymentMethod?: string;   // e.g. mercadopago
   paymentId?: string | null;
+
+  /* Cliente */
+  customerEmail?: string;
+  customerName?: string;
+  source?: string;   // web, app, etc.
+  priority?: string; // normal, high, etc.
+
+  /* Fechas */
+  paymentDate?: string;
   createdAt?: string;
   updatedAt?: string;
+
+  /* Envío */
+  shippingAddress?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    country?: string;
+    contact?: ShippingContact;
+  };
 };
 
 type OrdersWrapped = { success: true; data: Order[]; message?: string };
@@ -61,6 +89,14 @@ function money(n?: number, ccy?: string) {
 function itemName(it: OrderItem) {
   return it.product?.name ?? it.productName ?? "(Producto)";
 }
+function dt(iso?: string) {
+  if (!iso) return "—";
+  try {
+    return new Intl.DateTimeFormat("es-AR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso));
+  } catch {
+    return iso;
+  }
+}
 
 /* ========= Página: Mis pedidos (usuario) ========= */
 export default function MyOrdersPage() {
@@ -73,7 +109,7 @@ export default function MyOrdersPage() {
   const [offset, setOffset] = useState(0);
   const [total, setTotal] = useState<number | null>(null);
 
-  /* === NUEVO resumen: estado === */
+  /* === resumen === */
   const [summary, setSummary] = useState<{ totalOrders: number; paidOrders: number; pendingOrders: number; totalSpent: number; currency?: string } | null>(null);
   const [summaryErr, setSummaryErr] = useState<string | null>(null);
   const [loadingSummary, setLoadingSummary] = useState<boolean>(false);
@@ -85,42 +121,42 @@ export default function MyOrdersPage() {
       // 1) Intentar el endpoint autenticado del usuario
       let r = await apiFetch<OrdersResponse>(`/orders/my-orders?limit=${nextLimit}&offset=${nextOffset}`, { method: "GET" });
 
-      // 2) Si no vino success true, fallback al endpoint general
+      // 2) Fallback al endpoint general
       if (!Array.isArray(r) && (!("success" in r) || r.success !== true)) {
         r = await apiFetch<OrdersResponse>(`/orders?limit=${nextLimit}&offset=${nextOffset}`, { method: "GET" });
       }
 
-      if (Array.isArray(r)) {
-        const arr = r as Order[];
-        const sorted = [...arr].sort(
-          (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-        );
-        setOrders(sorted);
-        setTotal(arr.length);
-        setLimit(nextLimit);
-        setOffset(0);
-        return;
+      const takeArray = (resp: OrdersResponse): Order[] => {
+        if (Array.isArray(resp)) return resp;
+        if ("success" in resp && resp.success === true) {
+          const data: any = (resp as any).data;
+          return Array.isArray(data) ? data : (data?.orders ?? []);
+        }
+        return [];
+      };
+
+      const arr = takeArray(r).map((o) => ({
+        ...o,
+        discountAmount: typeof o.discountAmount === "number" ? o.discountAmount : (typeof (o as any).discount === "number" ? (o as any).discount : undefined),
+      }));
+
+      const sorted = [...arr].sort(
+        (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+      );
+
+      // totales para paginación si vienen
+      let tt = arr.length, lo = nextLimit, of = nextOffset;
+      if (!Array.isArray(r) && "success" in r && r.success === true) {
+        const data: any = (r as any).data;
+        tt = Array.isArray(data) ? arr.length : (data?.total ?? arr.length);
+        lo = Array.isArray(data) ? nextLimit   : (data?.limit ?? nextLimit);
+        of = Array.isArray(data) ? 0           : (data?.offset ?? nextOffset);
       }
 
-      if ("success" in r && r.success === true) {
-        const data = (r as OrdersWrapped | OrdersWrappedPaged).data as any;
-        const arr: Order[] = Array.isArray(data) ? data : (data?.orders ?? []);
-        const tt  = Array.isArray(data) ? arr.length : (data?.total ?? arr.length);
-        const lo  = Array.isArray(data) ? nextLimit   : (data?.limit ?? nextLimit);
-        const of  = Array.isArray(data) ? 0          : (data?.offset ?? nextOffset);
-
-        const sorted = [...arr].sort(
-          (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-        );
-        setOrders(sorted);
-        setTotal(tt);
-        setLimit(lo);
-        setOffset(of);
-        return;
-      }
-
-      const msg = ("message" in r && (r as OrdersError).message) || "No se pudieron obtener tus pedidos";
-      throw new Error(msg);
+      setOrders(sorted);
+      setTotal(tt);
+      setLimit(lo);
+      setOffset(of);
     } catch (e: any) {
       const m = e?.message || "No se pudieron obtener tus pedidos";
       setErr(m);
@@ -132,18 +168,13 @@ export default function MyOrdersPage() {
     }
   }
 
-  /* === NUEVO resumen: fetch === */
   async function loadSummary() {
     setSummaryErr(null);
     setLoadingSummary(true);
     try {
       const r = await apiFetch<MyOrdersSummary>(`/orders/my-orders/summary`, { method: "GET" });
-      if ("success" in r && r.success) {
-        setSummary(r.data);
-      } else {
-        const msg = ("message" in r && r.message) || "No se pudo obtener el resumen";
-        throw new Error(msg);
-      }
+      if ("success" in r && r.success) setSummary(r.data);
+      else throw new Error(("message" in r && r.message) || "No se pudo obtener el resumen");
     } catch (e: any) {
       const m = e?.message || "No se pudo obtener el resumen";
       setSummaryErr(m);
@@ -156,7 +187,6 @@ export default function MyOrdersPage() {
   }
 
   useEffect(() => {
-    // cargar ambos en paralelo
     loadOrders(0, limit);
     loadSummary();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -181,7 +211,6 @@ export default function MyOrdersPage() {
     loadOrders(0, l);
   }
 
-  // Moneda preferida para mostrar el resumen
   const summaryCcy = summary?.currency || "USD";
 
   return (
@@ -193,7 +222,7 @@ export default function MyOrdersPage() {
         </div>
       </header>
 
-      {/* === NUEVO resumen: tarjeta superior === */}
+      {/* Resumen */}
       <section
         style={{
           display: "grid",
@@ -220,6 +249,7 @@ export default function MyOrdersPage() {
         )}
       </section>
 
+      {/* Controles */}
       <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
         <label style={{ fontSize: 13, opacity: 0.8 }}>Por página:</label>
         <select
@@ -285,63 +315,100 @@ export default function MyOrdersPage() {
 
       {!loading && !err && orders.length > 0 && (
         <div style={{ display: "grid", gap: 12 }}>
-          {orders.map((o) => (
-            <article
-              key={o._id}
-              style={{
-                display: "grid",
-                gap: 8,
-                padding: 12,
-                border: "1px solid #eee",
-                borderRadius: 12,
-                background: "#fff",
-              }}
-            >
-              <div style={{ display: "grid", gap: 4 }}>
-                <div><strong>ID:</strong> {o._id}</div>
-                <div>
-                  <strong>Estado:</strong> {o.status}
-                  &nbsp;•&nbsp; <strong>Total:</strong> {money(o.total, o.currency)}
-                  &nbsp;•&nbsp; <strong>Ítems:</strong> {o.items?.length ?? 0}
+          {orders.map((o) => {
+            const discount = typeof o.discountAmount === "number" ? o.discountAmount : (typeof o.discount === "number" ? o.discount : undefined);
+            const ccy = o.currency || "ARS";
+            return (
+              <article
+                key={o._id}
+                style={{
+                  display: "grid",
+                  gap: 8,
+                  padding: 12,
+                  border: "1px solid #eee",
+                  borderRadius: 12,
+                  background: "#fff",
+                }}
+              >
+                {/* Encabezado */}
+                <div style={{ display: "grid", gap: 4 }}>
+                  <div style={{ fontWeight: 700 }}>
+                    {o.orderNumber ? o.orderNumber : `Pedido #${o._id}`}
+                  </div>
+                  <div>
+                    <strong>Estado:</strong> {o.status}
+                    {o.paymentStatus ? <> &nbsp;•&nbsp; <strong>Pago:</strong> {o.paymentStatus}</> : null}
+                    {o.paymentMethod ? <> &nbsp;•&nbsp; <strong>Método:</strong> {String(o.paymentMethod).toUpperCase()}</> : null}
+                  </div>
+
+                  {/* Totales */}
+                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 14 }}>
+                    {typeof o.subtotal === "number" && <span>Subtotal: {money(o.subtotal, ccy)}</span>}
+                    {typeof discount === "number" && <span>Descuento: −{money(discount, ccy)}</span>}
+                    {typeof o.tax === "number" && <span>Impuestos: {money(o.tax, ccy)}</span>}
+                    {typeof o.shippingCost === "number" && <span>Envío: {money(o.shippingCost, ccy)}</span>}
+                    <span><strong>Total:</strong> {money(o.total, ccy)}</span>
+                  </div>
+
+                  {/* Fechas */}
+                  <div style={{ color: "#666", fontSize: 14 }}>
+                    {o.createdAt && <>Creado: {dt(o.createdAt)}</>}
+                    {o.paymentDate && <> &nbsp;•&nbsp; Pago: {dt(o.paymentDate)}</>}
+                  </div>
+
+                  {/* Cliente */}
+                  {(o.customerName || o.customerEmail) && (
+                    <div style={{ color: "#444", fontSize: 14 }}>
+                      <strong>Cliente:</strong> {o.customerName ?? "—"} {o.customerEmail ? `• ${o.customerEmail}` : ""}
+                    </div>
+                  )}
+
+                  {/* Envío */}
+                  {o.shippingAddress && (
+                    <div style={{ opacity: 0.95 }}>
+                      <strong>Envío:</strong>{" "}
+                      {[
+                        o.shippingAddress.street,
+                        o.shippingAddress.city,
+                        o.shippingAddress.state,
+                        o.shippingAddress.zip,
+                        o.shippingAddress.country,
+                      ].filter(Boolean).join(", ")}
+                      {o.shippingAddress.contact && (
+                        <>
+                          {" • "}
+                          {[
+                            o.shippingAddress.contact.name,
+                            o.shippingAddress.contact.phone,
+                            o.shippingAddress.contact.email,
+                          ].filter(Boolean).join(" | ")}
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
-                {o.shippingAddress && (
-                  <div style={{ opacity: 0.9 }}>
-                    <strong>Envío:</strong> {o.shippingAddress.street ?? "—"}, {o.shippingAddress.city ?? "—"} ({o.shippingAddress.zip ?? "—"}), {o.shippingAddress.country ?? "—"}
-                  </div>
-                )}
-                <div style={{ opacity: 0.9 }}>
-                  {o.createdAt && <> <strong>Creado:</strong> {new Date(o.createdAt).toLocaleString("es-AR")} </>}
+
+                {/* Ítems resumidos */}
+                <div style={{ display: "grid", gap: 6 }}>
+                  {(o.items ?? []).map((it, idx) => (
+                    <div key={idx} style={{ display: "flex", gap: 10, alignItems: "baseline", fontSize: 14 }}>
+                      <span style={{ fontWeight: 600 }}>{itemName(it)}</span>
+                      <span>• Cant: {it.quantity}</span>
+                      {it.size ? <span>• Talle: {it.size}</span> : null}
+                      <span>• Precio: {money(it.price, ccy)}</span>
+                      <span>• Subtotal: {money(it.price * it.quantity, ccy)}</span>
+                    </div>
+                  ))}
                 </div>
-              </div>
 
-              {/* Items resumidos */}
-              <div style={{ display: "grid", gap: 6 }}>
-                {(o.items ?? []).map((it, idx) => (
-                  <div key={idx} style={{ display: "flex", gap: 10, alignItems: "baseline", fontSize: 14 }}>
-                    <span style={{ fontWeight: 600 }}>{itemName(it)}</span>
-                    <span>• Cant: {it.quantity}</span>
-                    <span>• Precio: {money(it.price, o.currency)}</span>
-                    {it.size ? <span>• Talle: {it.size}</span> : null}
-                  </div>
-                ))}
-              </div>
-
-              {/* Totales por ítem */}
-              <div style={{ display: "grid", gap: 4, fontSize: 13, color: "#555" }}>
-                {(o.items ?? []).map((it, idx) => (
-                  <div key={`m-${idx}`}>
-                    <strong>{itemName(it)}</strong>: {money(it.price * it.quantity, o.currency)} ({money(it.price, o.currency)} c/u × {it.quantity})
-                  </div>
-                ))}
-              </div>
-
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                <Link href={`/pedidos/${o._id}`} style={{ textDecoration: "underline" }}>
-                  Ver detalle
-                </Link>
-              </div>
-            </article>
-          ))}
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  <Link href={`/pedidos/${o._id}`} style={{ textDecoration: "underline" }}>
+                    Ver detalle
+                  </Link>
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
     </main>
